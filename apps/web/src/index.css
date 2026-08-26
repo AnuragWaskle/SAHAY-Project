@@ -1,0 +1,26 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
+@import 'leaflet/dist/leaflet.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .glass {
+    @apply bg-white/60 backdrop-blur-xl border border-white/80 shadow-[0_8px_32px_0_rgba(31,38,135,0.05)];
+  }
+  .glass-dark {
+    @apply bg-white/20 backdrop-blur-2xl border border-white/40 shadow-[0_12px_40px_0_rgba(31,38,135,0.15)];
+  }
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-brand-orange to-brand-blue;
+  }
+}
+
+body {
+  font-family: 'Outfit', 'Inter', sans-serif;
+  background: linear-gradient(135deg, #F8F9FA 0%, #E9ECEF 100%);
+  background-attachment: fixed;
+  color: #1A202C;
+  min-height: 100vh;
+}
