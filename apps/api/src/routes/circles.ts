@@ -10,7 +10,7 @@ router.get('/', optionalAuth, async (req: AuthRequest, res: Response) => {
     const { city_id, ward_id, search } = req.query as Record<string, string>;
     const params: unknown[] = [];
     const conditions: string[] = [];
-    let p = 1;
+    let p = 2;
 
     if (city_id) {
       conditions.push(`c.city_id = $${p++}`);
@@ -188,6 +188,71 @@ router.post('/:id/leave', requireAuth, async (req: AuthRequest, res: Response) =
   } catch (err: any) {
     const statusCode = err.message === 'Circle not found' ? 404 : 500;
     res.status(statusCode).json({ success: false, error: err.message || 'Failed to leave circle' });
+  }
+});
+
+// ─── GET /circles/:id/messages (fetch circle discussion thread) ──
+router.get('/:id/messages', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const circleId = req.params.id;
+    const memberCheck = await query(
+      'SELECT 1 FROM circle_members WHERE circle_id = $1 AND user_id = $2',
+      [circleId, req.user!.id]
+    );
+    if (memberCheck.rowCount === 0) {
+      res.status(403).json({ success: false, error: 'You must join this circle to view messages' });
+      return;
+    }
+
+    const messages = await query(
+      `SELECT cm.*, u.name as user_name, u.avatar_url
+       FROM circle_messages cm
+       JOIN users u ON cm.user_id = u.id
+       WHERE cm.circle_id = $1
+       ORDER BY cm.created_at ASC LIMIT 100`,
+      [circleId]
+    );
+    res.json({ success: true, data: messages.rows });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to fetch messages' });
+  }
+});
+
+// ─── POST /circles/:id/messages (post message to circle) ──────────
+router.post('/:id/messages', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const circleId = req.params.id;
+    const { message } = req.body;
+    if (!message?.trim()) {
+      res.status(400).json({ success: false, error: 'Message content required' });
+      return;
+    }
+
+    const memberCheck = await query(
+      'SELECT 1 FROM circle_members WHERE circle_id = $1 AND user_id = $2',
+      [circleId, req.user!.id]
+    );
+    if (memberCheck.rowCount === 0) {
+      res.status(403).json({ success: false, error: 'You must join this circle to post messages' });
+      return;
+    }
+
+    const result = await query(
+      `INSERT INTO circle_messages (circle_id, user_id, message)
+       VALUES ($1, $2, $3)
+       RETURNING *`,
+      [circleId, req.user!.id, message.trim()]
+    );
+    
+    const msg = {
+      ...result.rows[0],
+      user_name: req.user!.name,
+      avatar_url: req.user!.avatar_url || null
+    };
+
+    res.status(201).json({ success: true, data: msg });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to post message' });
   }
 });
 

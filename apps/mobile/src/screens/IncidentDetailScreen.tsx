@@ -258,19 +258,78 @@ export default function IncidentDetailScreen() {
         </View>
       )}
 
+      {/* AI Priority Classification Card */}
+      <View
+        className="mx-5 mt-5 bg-indigo-50/50 p-5 rounded-[24px] border border-indigo-100/80 shadow-sm"
+        style={{ elevation: 2 }}
+      >
+        <View className="flex-row items-center mb-3">
+          <View className="w-10 h-10 rounded-2xl bg-indigo-100 items-center justify-center">
+            <Shield size={18} color="#4F46E5" />
+          </View>
+          <View className="ml-3">
+            <Text className="text-sm font-black text-gray-800">AI Priority Explanation</Text>
+            <Text className="text-[10px] text-indigo-700 font-black uppercase tracking-wider">Classification Factors</Text>
+          </View>
+        </View>
+
+        <Text className="text-xs text-gray-500 font-medium leading-relaxed mb-4">
+          Sahay's automated system classifies priority scores dynamically to prevent response bias and fast-track severe local problems.
+        </Text>
+
+        <View className="space-y-3">
+          {/* Factor 1: Report Density */}
+          <View className="flex-row items-center justify-between py-1">
+            <View className="flex-1 mr-3">
+              <Text className="text-xs font-bold text-gray-700">Report Frequency Multiplier</Text>
+              <Text className="text-[10px] text-gray-400 font-medium">Repeated reports in the location: {incident.report_count}</Text>
+            </View>
+            <View className="bg-indigo-100/40 px-2 py-1 rounded-md">
+              <Text className="text-[11px] font-black text-indigo-700">+{Math.min(10, (incident.report_count || 1) * 2)} pts</Text>
+            </View>
+          </View>
+
+          {/* Factor 2: Severity */}
+          <View className="flex-row items-center justify-between py-1">
+            <View className="flex-1 mr-3">
+              <Text className="text-xs font-bold text-gray-700">Hazard Gravity Rating</Text>
+              <Text className="text-[10px] text-gray-400 font-medium">Severity classified as {incident.severity}</Text>
+            </View>
+            <View className="bg-indigo-100/40 px-2 py-1 rounded-md">
+              <Text className="text-[11px] font-black text-indigo-700">
+                +{incident.severity?.toLowerCase() === 'critical' ? '25' :
+                  incident.severity?.toLowerCase() === 'high' ? '15' : '10'} pts
+              </Text>
+            </View>
+          </View>
+
+          {/* Factor 3: Citizen consensus */}
+          <View className="flex-row items-center justify-between py-1">
+            <View className="flex-1 mr-3">
+              <Text className="text-xs font-bold text-gray-700">Community Consensus Weight</Text>
+              <Text className="text-[10px] text-gray-400 font-medium">Distinct verified citizen signatures: {incident.unique_citizen_count || 1}</Text>
+            </View>
+            <View className="bg-indigo-100/40 px-2 py-1 rounded-md">
+              <Text className="text-[11px] font-black text-indigo-700">
+                +{Math.min(15, (incident.unique_citizen_count || 1) * 3)} pts
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        <View className="mt-4 pt-3.5 border-t border-indigo-100/50 flex-row justify-between items-center">
+          <Text className="text-[11px] font-extrabold text-indigo-700 uppercase tracking-widest">Aggregate Priority score</Text>
+          <Text className="text-lg font-black text-indigo-650">{Number(incident.priority_score).toFixed(0)} Points</Text>
+        </View>
+      </View>
+
       {/* Demand Section */}
       {incident.demands && incident.demands.length > 0 && (
         <View
           className="mx-5 mt-5 bg-white p-5 rounded-[24px]"
-          style={{
-            elevation: 5,
-            shadowColor: '#3B82F6',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.08,
-            shadowRadius: 10,
-          }}
+          style={{ elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.05, shadowRadius: 10 }}
         >
-          <View className="flex-row items-center mb-3">
+          <View className="flex-row items-center mb-4">
             <View className="w-10 h-10 rounded-2xl bg-blue-50 items-center justify-center">
               <Megaphone size={18} color="#3B82F6" />
             </View>
@@ -283,22 +342,31 @@ export default function IncidentDetailScreen() {
             </View>
             <Text className="text-sm text-gray-500 font-medium">{incident.demands[0].supporters_count || 0} supporters</Text>
           </View>
-          <TouchableOpacity
-            onPress={handleSupport}
-            disabled={supported}
-            className={`py-3.5 rounded-2xl items-center ${supported ? 'bg-green-500' : 'bg-brand-orange'}`}
-            style={{
-              elevation: 4,
-              shadowColor: supported ? '#16A34A' : '#FF7E67',
-              shadowOffset: { width: 0, height: 4 },
-              shadowOpacity: 0.3,
-              shadowRadius: 8,
-            }}
-          >
-            <Text className="text-white font-black text-base">
-              {supported ? 'Supported!' : 'Support This Demand'}
-            </Text>
-          </TouchableOpacity>
+          <View className="flex-row">
+            <TouchableOpacity
+              onPress={handleSupport}
+              disabled={supported}
+              className={`flex-1 py-3.5 rounded-2xl items-center mr-2 ${supported ? 'bg-green-500' : 'bg-brand-orange'}`}
+              style={{
+                elevation: 4,
+                shadowColor: supported ? '#16A34A' : '#FF7E67',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.3,
+                shadowRadius: 8,
+              }}
+            >
+              <Text className="text-white font-black text-sm">
+                {supported ? 'Supported!' : 'Support'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('DemandDetail', { demandId: incident.demands[0].id })}
+              className="flex-1 py-3.5 rounded-2xl items-center ml-2 bg-blue-600"
+              style={{ elevation: 4 }}
+            >
+              <Text className="text-white font-black text-sm">View Details</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 

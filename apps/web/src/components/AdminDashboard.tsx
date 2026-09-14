@@ -2,11 +2,12 @@ import React, { useEffect, useState, useCallback } from 'react';
 import {
   ShieldCheck, LayoutDashboard, Users, AlertTriangle, Building2, Settings,
   ListChecks, Loader2, RefreshCw, Search, ChevronDown, Activity,
-  FileText, CheckCircle, XCircle, Clock, TrendingUp, Database
+  FileText, CheckCircle, XCircle, Clock, TrendingUp, Database,
+  Cpu, Gift, DollarSign, Zap, Shield, ToggleLeft, ToggleRight, Edit2
 } from 'lucide-react';
 import apiClient from '../api/client';
 
-type Tab = 'command' | 'users' | 'incidents' | 'ngo' | 'settings';
+type Tab = 'command' | 'users' | 'incidents' | 'ngo' | 'settings' | 'ai' | 'rewards' | 'revenue';
 
 const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   { key: 'command', label: 'Command Center', icon: <LayoutDashboard size={20} /> },
@@ -14,6 +15,9 @@ const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   { key: 'incidents', label: 'Incidents', icon: <AlertTriangle size={20} /> },
   { key: 'ngo', label: 'NGO / Initiatives', icon: <Building2 size={20} /> },
   { key: 'settings', label: 'Analytics & Settings', icon: <Settings size={20} /> },
+  { key: 'ai', label: 'AI Intelligence', icon: <Cpu size={20} /> },
+  { key: 'rewards', label: 'Rewards & Credits', icon: <Gift size={20} /> },
+  { key: 'revenue', label: 'Revenue & CSR', icon: <DollarSign size={20} /> },
 ];
 
 const AdminDashboard = () => {
@@ -50,6 +54,9 @@ const AdminDashboard = () => {
         {activeTab === 'incidents' && <IncidentManagement />}
         {activeTab === 'ngo' && <NGOManagement />}
         {activeTab === 'settings' && <AnalyticsSettings />}
+        {activeTab === 'ai' && <AIIntelligence />}
+        {activeTab === 'rewards' && <RewardsCredits />}
+        {activeTab === 'revenue' && <RevenueCSR />}
       </main>
     </div>
   );
@@ -591,6 +598,554 @@ function AnalyticsSettings() {
           <ConfigItem label="Priority Formula" value="Severity 25% | Population 20% | Support 15% | Recurrence 15% | Vulnerability 10% | Evidence 10% | Urgency 5%" />
           <ConfigItem label="Auto-Promote Threshold" value="50 supporters → community_supported" />
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Section 6: AI Intelligence Center ─────────────────────────
+
+function AIIntelligence() {
+  const [stats, setStats] = useState<any>(null);
+  const [economics, setEconomics] = useState<any>(null);
+  const [health, setHealth] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [statsRes, econRes, healthRes] = await Promise.all([
+        apiClient.get('/ai/stats').catch(() => null),
+        apiClient.get('/ai/economics').catch(() => null),
+        apiClient.get('/ai/health').catch(() => null),
+      ]);
+      setStats(statsRes?.data?.data || null);
+      setEconomics(econRes?.data?.data || null);
+      setHealth(healthRes?.data?.data || null);
+    } catch (err) {
+      console.error('AI Intelligence fetch failed', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  if (loading) return <><SectionHeader title="AI Intelligence Center" subtitle="NVIDIA Nemotron operations & economics" onRefresh={fetchData} /><LoadingState /></>;
+
+  const successRate = stats?.success_rate ?? health?.success_rate ?? 0;
+  const statusColor = successRate > 95 ? 'bg-green-500' : successRate > 80 ? 'bg-yellow-500' : 'bg-red-500';
+  const statusLabel = successRate > 95 ? 'Operational' : successRate > 80 ? 'Degraded' : 'Issues Detected';
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader title="AI Intelligence Center" subtitle="NVIDIA Nemotron operations & economics" onRefresh={fetchData} />
+
+      {/* AI Provider Card */}
+      <div className="glass-dark p-6 rounded-3xl border-b-4 border-brand-indigo relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-48 h-48 bg-brand-indigo/10 rounded-full blur-3xl -z-10"></div>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 rounded-xl bg-gradient-to-br from-brand-indigo to-purple-700">
+                <Cpu size={24} className="text-white" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-gray-800 text-xl">NVIDIA Nemotron</h3>
+                <p className="text-sm text-gray-500 font-medium">{stats?.model || 'nvidia/llama-3.1-nemotron-ultra-253b-v1'}</p>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className={`w-3 h-3 rounded-full ${statusColor} animate-pulse`}></div>
+            <span className="font-bold text-gray-700">{statusLabel}</span>
+            <span className="text-xs bg-gray-100 px-3 py-1 rounded-full font-bold text-gray-600">
+              {(successRate).toFixed(1)}% uptime
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* AI Operations Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard label="Requests (Today)" value={stats?.total_requests || 0} icon={<Zap size={24} />} color="indigo" />
+        <StatCard label="Success Rate" value={`${(successRate).toFixed(1)}%`} icon={<CheckCircle size={24} />} color="green" />
+        <StatCard label="Avg Latency" value={`${stats?.avg_latency_ms || 0}ms`} icon={<Clock size={24} />} color="orange" />
+        <StatCard label="Avg Confidence" value={`${(stats?.avg_confidence || 0).toFixed(1)}%`} icon={<TrendingUp size={24} />} color="blue" />
+      </div>
+
+      {/* AI Tasks Breakdown */}
+      <div className="glass p-6 rounded-3xl">
+        <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+          <Activity size={18} className="text-brand-indigo" /> AI Tasks Breakdown
+        </h3>
+        {stats?.tasks && stats.tasks.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-gray-500 font-bold border-b border-gray-200">
+                  <th className="pb-3 pr-4">Task</th>
+                  <th className="pb-3 pr-4">Requests</th>
+                  <th className="pb-3 pr-4">Success Rate</th>
+                  <th className="pb-3 pr-4">Avg Confidence</th>
+                  <th className="pb-3">Avg Latency</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.tasks.map((task: any) => (
+                  <tr key={task.task} className="border-b border-gray-100 hover:bg-white/50">
+                    <td className="py-3 pr-4 font-bold text-gray-800 capitalize">{task.task.replace(/_/g, ' ')}</td>
+                    <td className="py-3 pr-4 font-medium text-gray-700">{task.count}</td>
+                    <td className="py-3 pr-4">
+                      <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                        task.success_rate >= 95 ? 'bg-green-100 text-green-700' :
+                        task.success_rate >= 80 ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-red-100 text-red-700'
+                      }`}>
+                        {task.success_rate?.toFixed(1)}%
+                      </span>
+                    </td>
+                    <td className="py-3 pr-4 font-medium text-gray-700">{task.avg_confidence?.toFixed(1)}%</td>
+                    <td className="py-3 font-medium text-gray-700">{task.avg_latency_ms}ms</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {['Classification', 'Clustering', 'Duplicate Detection', 'Priority', 'Summarization', 'Verification'].map(task => (
+              <div key={task} className="bg-white/60 p-4 rounded-2xl border border-white/80">
+                <p className="font-bold text-gray-700 text-sm">{task}</p>
+                <p className="text-xs text-gray-400 mt-1">No data yet</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* AI Economics */}
+      <div className="glass p-6 rounded-3xl">
+        <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+          <DollarSign size={18} className="text-brand-green" /> AI Economics
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="bg-white/60 p-4 rounded-2xl border border-white/80 text-center">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Est. Cost Today</p>
+            <p className="text-xl font-black text-gray-800 mt-1">₹{economics?.estimated_cost_today?.toFixed(2) || '0.00'}</p>
+          </div>
+          <div className="bg-white/60 p-4 rounded-2xl border border-white/80 text-center">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Cost/Report</p>
+            <p className="text-xl font-black text-gray-800 mt-1">₹{economics?.cost_per_report?.toFixed(3) || '0.000'}</p>
+          </div>
+          <div className="bg-white/60 p-4 rounded-2xl border border-white/80 text-center">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Cost/Incident</p>
+            <p className="text-xl font-black text-gray-800 mt-1">₹{economics?.cost_per_incident?.toFixed(3) || '0.000'}</p>
+          </div>
+          <div className="bg-white/60 p-4 rounded-2xl border border-white/80 text-center">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Cost/User</p>
+            <p className="text-xl font-black text-gray-800 mt-1">₹{economics?.cost_per_user?.toFixed(3) || '0.000'}</p>
+          </div>
+          <div className="bg-white/60 p-4 rounded-2xl border border-white/80 text-center">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">Failure Rate</p>
+            <p className="text-xl font-black text-red-600 mt-1">{economics?.failure_rate?.toFixed(2) || '0.00'}%</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Section 7: Rewards & Credits ──────────────────────────────
+
+function RewardsCredits() {
+  const [rules, setRules] = useState<any[]>([]);
+  const [redemptions, setRedemptions] = useState<any[]>([]);
+  const [dashboard, setDashboard] = useState<any>(null);
+  const [fraudFlags, setFraudFlags] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingRule, setEditingRule] = useState<string | null>(null);
+  const [editValues, setEditValues] = useState<any>({});
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [rulesRes, redemptionsRes, dashRes, fraudRes] = await Promise.all([
+        apiClient.get('/credits/rules').catch(() => null),
+        apiClient.get('/rewards/redemptions/all', { params: { limit: 20 } }).catch(() => null),
+        apiClient.get('/credits/dashboard').catch(() => null),
+        apiClient.get('/fraud/flags', { params: { status: 'pending', limit: 10 } }).catch(() => null),
+      ]);
+      setRules(rulesRes?.data?.data || []);
+      setRedemptions(redemptionsRes?.data?.data || []);
+      setDashboard(dashRes?.data?.data || null);
+      setFraudFlags(fraudRes?.data?.data || []);
+    } catch (err) {
+      console.error('Rewards fetch failed', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const toggleRule = async (id: string, active: boolean) => {
+    try {
+      await apiClient.patch(`/credits/rules/${id}`, { active: !active });
+      setRules(prev => prev.map(r => r.id === id ? { ...r, active: !active } : r));
+    } catch (err) {
+      console.error('Failed to toggle rule', err);
+    }
+  };
+
+  const saveRuleEdit = async (id: string) => {
+    try {
+      await apiClient.patch(`/credits/rules/${id}`, editValues);
+      setRules(prev => prev.map(r => r.id === id ? { ...r, ...editValues } : r));
+      setEditingRule(null);
+      setEditValues({});
+    } catch (err) {
+      console.error('Failed to save rule', err);
+    }
+  };
+
+  const handleFraudAction = async (id: string, action: 'confirmed' | 'dismissed') => {
+    try {
+      await apiClient.patch(`/fraud/flags/${id}`, { status: action });
+      setFraudFlags(prev => prev.filter(f => f.id !== id));
+    } catch (err) {
+      console.error('Failed to update fraud flag', err);
+    }
+  };
+
+  if (loading) return <><SectionHeader title="Rewards & Credits" subtitle="Civic credit economy management" onRefresh={fetchData} /><LoadingState /></>;
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader title="Rewards & Credits" subtitle="Civic credit economy management" onRefresh={fetchData} />
+
+      {/* Economy Overview */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard label="Credits Issued" value={dashboard?.total_credits_issued || 0} icon={<Zap size={24} />} color="orange" />
+        <StatCard label="Credits Redeemed" value={dashboard?.total_credits_redeemed || 0} icon={<Gift size={24} />} color="green" />
+        <StatCard label="Active Campaigns" value={dashboard?.active_campaigns || 0} icon={<TrendingUp size={24} />} color="blue" />
+        <StatCard label="Fraud Alerts" value={fraudFlags.length} icon={<Shield size={24} />} color="indigo" />
+      </div>
+
+      {/* Reward Rules Table */}
+      <div className="glass p-6 rounded-3xl">
+        <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+          <ListChecks size={18} className="text-brand-orange" /> Reward Rules ({rules.length})
+        </h3>
+        {rules.length === 0 ? <EmptyState message="No reward rules configured" /> : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-gray-500 font-bold border-b border-gray-200">
+                  <th className="pb-3 pr-4">Action</th>
+                  <th className="pb-3 pr-4">Base Points</th>
+                  <th className="pb-3 pr-4">Daily Limit</th>
+                  <th className="pb-3 pr-4">Verification</th>
+                  <th className="pb-3 pr-4">Active</th>
+                  <th className="pb-3">Edit</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rules.map((rule: any) => (
+                  <tr key={rule.id} className="border-b border-gray-100 hover:bg-white/50">
+                    <td className="py-3 pr-4">
+                      <span className="font-bold text-gray-800">{rule.label}</span>
+                      <p className="text-xs text-gray-400">{rule.action}</p>
+                    </td>
+                    <td className="py-3 pr-4">
+                      {editingRule === rule.id ? (
+                        <input
+                          type="number"
+                          className="w-16 px-2 py-1 border border-gray-200 rounded-lg text-sm font-bold"
+                          defaultValue={rule.base_points}
+                          onChange={e => setEditValues((v: any) => ({ ...v, base_points: parseInt(e.target.value) }))}
+                        />
+                      ) : (
+                        <span className="font-black text-brand-orange">+{rule.base_points}</span>
+                      )}
+                    </td>
+                    <td className="py-3 pr-4">
+                      {editingRule === rule.id ? (
+                        <input
+                          type="number"
+                          className="w-16 px-2 py-1 border border-gray-200 rounded-lg text-sm font-bold"
+                          defaultValue={rule.daily_limit}
+                          onChange={e => setEditValues((v: any) => ({ ...v, daily_limit: parseInt(e.target.value) }))}
+                        />
+                      ) : (
+                        <span className="font-medium text-gray-700">{rule.daily_limit}/day</span>
+                      )}
+                    </td>
+                    <td className="py-3 pr-4">
+                      <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                        rule.requires_verification ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        {rule.requires_verification ? 'Required' : 'No'}
+                      </span>
+                    </td>
+                    <td className="py-3 pr-4">
+                      <button onClick={() => toggleRule(rule.id, rule.active)} className="text-gray-500 hover:text-gray-800">
+                        {rule.active ? <ToggleRight size={24} className="text-green-500" /> : <ToggleLeft size={24} className="text-gray-400" />}
+                      </button>
+                    </td>
+                    <td className="py-3">
+                      {editingRule === rule.id ? (
+                        <div className="flex gap-1">
+                          <button onClick={() => saveRuleEdit(rule.id)} className="px-2 py-1 rounded-lg bg-green-500 text-white text-xs font-bold">Save</button>
+                          <button onClick={() => { setEditingRule(null); setEditValues({}); }} className="px-2 py-1 rounded-lg bg-gray-200 text-gray-600 text-xs font-bold">Cancel</button>
+                        </div>
+                      ) : (
+                        <button onClick={() => { setEditingRule(rule.id); setEditValues({}); }} className="p-1.5 rounded-lg hover:bg-gray-100">
+                          <Edit2 size={14} className="text-gray-500" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Recent Redemptions */}
+      <div className="glass p-6 rounded-3xl">
+        <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+          <Gift size={18} className="text-brand-green" /> Recent Redemptions
+        </h3>
+        {redemptions.length === 0 ? <EmptyState message="No redemptions yet" /> : (
+          <div className="space-y-2">
+            {redemptions.map((r: any) => (
+              <div key={r.id} className="bg-white/60 p-4 rounded-2xl border border-white/80 flex justify-between items-center">
+                <div>
+                  <span className="font-bold text-gray-800">{r.user_name || 'User'}</span>
+                  <span className="mx-2 text-gray-400">→</span>
+                  <span className="font-medium text-gray-700">{r.reward_name || 'Reward'}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="font-black text-brand-orange">-{r.credits_spent}</span>
+                  <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                    r.status === 'fulfilled' ? 'bg-green-100 text-green-700' :
+                    r.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                    'bg-gray-100 text-gray-600'
+                  }`}>
+                    {r.status}
+                  </span>
+                  <span className="text-xs text-gray-400">{new Date(r.created_at).toLocaleDateString()}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Fraud Alerts */}
+      <div className="glass p-6 rounded-3xl">
+        <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+          <Shield size={18} className="text-red-500" /> Fraud Alerts ({fraudFlags.length} pending)
+        </h3>
+        {fraudFlags.length === 0 ? <EmptyState message="No pending fraud alerts — system is clean" /> : (
+          <div className="space-y-3">
+            {fraudFlags.map((flag: any) => (
+              <div key={flag.id} className="bg-white/70 p-4 rounded-2xl border border-white/80 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-bold text-gray-800">{flag.user_name || 'Unknown User'}</span>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                      flag.severity === 'critical' ? 'bg-red-100 text-red-700' :
+                      flag.severity === 'high' ? 'bg-orange-100 text-orange-700' :
+                      flag.severity === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                      'bg-gray-100 text-gray-600'
+                    }`}>
+                      {flag.severity}
+                    </span>
+                    <span className="text-xs bg-brand-indigo/10 text-brand-indigo px-2 py-0.5 rounded-full font-medium">
+                      {flag.flag_type?.replace(/_/g, ' ')}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-600">{flag.description}</p>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <button
+                    onClick={() => handleFraudAction(flag.id, 'dismissed')}
+                    className="px-3 py-1.5 rounded-xl bg-gray-100 text-gray-600 font-bold text-xs hover:bg-gray-200 transition-colors"
+                  >
+                    Dismiss
+                  </button>
+                  <button
+                    onClick={() => handleFraudAction(flag.id, 'confirmed')}
+                    className="px-3 py-1.5 rounded-xl bg-red-500 text-white font-bold text-xs hover:bg-red-600 transition-colors"
+                  >
+                    Confirm Fraud
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Section 8: Revenue & CSR ──────────────────────────────────
+
+function RevenueCSR() {
+  const [summary, setSummary] = useState<any>(null);
+  const [campaigns, setCampaigns] = useState<any[]>([]);
+  const [sponsors, setSponsors] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [summaryRes, campaignsRes, sponsorsRes] = await Promise.all([
+        apiClient.get('/revenue/summary').catch(() => null),
+        apiClient.get('/campaigns', { params: { status: 'active', limit: 10 } }).catch(() => null),
+        apiClient.get('/sponsors', { params: { limit: 10 } }).catch(() => null),
+      ]);
+      setSummary(summaryRes?.data?.data || null);
+      setCampaigns(campaignsRes?.data?.data || []);
+      setSponsors(sponsorsRes?.data?.data || []);
+    } catch (err) {
+      console.error('Revenue fetch failed', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  if (loading) return <><SectionHeader title="Revenue & CSR" subtitle="Platform revenue and sponsor management" onRefresh={fetchData} /><LoadingState /></>;
+
+  const REVENUE_SOURCES = [
+    { key: 'csr_platform_fee', label: 'CSR Platform Fee', color: 'bg-brand-green' },
+    { key: 'municipal_saas', label: 'Municipal SaaS', color: 'bg-brand-blue' },
+    { key: 'ngo_premium', label: 'NGO Premium', color: 'bg-brand-indigo' },
+    { key: 'impact_analytics', label: 'Impact Analytics', color: 'bg-brand-orange' },
+    { key: 'sponsorship_fee', label: 'Sponsorship Fee', color: 'bg-purple-500' },
+  ];
+
+  const totalRevenue = summary?.total_revenue || 0;
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader title="Revenue & CSR" subtitle="Platform revenue and sponsor management" onRefresh={fetchData} />
+
+      {/* Revenue Summary */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard label="Total Revenue" value={`₹${(summary?.total_revenue || 0).toLocaleString()}`} icon={<DollarSign size={24} />} color="green" />
+        <StatCard label="This Month" value={`₹${(summary?.this_month || 0).toLocaleString()}`} icon={<TrendingUp size={24} />} color="blue" />
+        <StatCard label="Active Sponsors" value={sponsors.length} icon={<Building2 size={24} />} color="orange" />
+        <StatCard label="Active Campaigns" value={campaigns.length} icon={<Activity size={24} />} color="indigo" />
+      </div>
+
+      {/* Revenue by Source */}
+      <div className="glass p-6 rounded-3xl">
+        <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+          <TrendingUp size={18} className="text-brand-green" /> Revenue by Source
+        </h3>
+        <div className="space-y-3">
+          {REVENUE_SOURCES.map(source => {
+            const amount = summary?.by_source?.[source.key] || 0;
+            const percentage = totalRevenue > 0 ? (amount / totalRevenue) * 100 : 0;
+            return (
+              <div key={source.key} className="bg-white/60 p-4 rounded-2xl border border-white/80">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="font-bold text-gray-700 text-sm">{source.label}</span>
+                  <span className="font-black text-gray-800">₹{amount.toLocaleString()}</span>
+                </div>
+                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full ${source.color}`} style={{ width: `${Math.min(percentage, 100)}%` }}></div>
+                </div>
+                <p className="text-xs text-gray-400 mt-1">{percentage.toFixed(1)}% of total</p>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Active Campaigns */}
+      <div className="glass p-6 rounded-3xl">
+        <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+          <Activity size={18} className="text-brand-blue" /> Active Campaigns ({campaigns.length})
+        </h3>
+        {campaigns.length === 0 ? <EmptyState message="No active campaigns" /> : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {campaigns.map((campaign: any) => {
+              const progress = campaign.target_participants > 0
+                ? Math.round((campaign.actual_participants / campaign.target_participants) * 100)
+                : 0;
+              return (
+                <div key={campaign.id} className="bg-white/70 p-5 rounded-2xl border border-white/80">
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <h4 className="font-bold text-gray-800">{campaign.title}</h4>
+                      <p className="text-xs text-gray-500 mt-0.5">{campaign.sponsor_name || 'Sponsor'}</p>
+                    </div>
+                    <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                      campaign.status === 'active' ? 'bg-green-100 text-green-700' :
+                      campaign.status === 'completed' ? 'bg-blue-100 text-blue-700' :
+                      'bg-yellow-100 text-yellow-700'
+                    }`}>
+                      {campaign.status}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-500 mb-2">
+                    <span>Budget: <span className="font-bold text-gray-700">₹{Number(campaign.budget || 0).toLocaleString()}</span></span>
+                    <span>{campaign.actual_participants}/{campaign.target_participants} participants</span>
+                  </div>
+                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full bg-gradient-to-r from-brand-blue to-brand-indigo" style={{ width: `${Math.min(progress, 100)}%` }}></div>
+                  </div>
+                  <p className="text-xs text-right text-gray-400 mt-1">{progress}% filled</p>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Sponsor Directory */}
+      <div className="glass p-6 rounded-3xl">
+        <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+          <Building2 size={18} className="text-brand-orange" /> Sponsor Directory ({sponsors.length})
+        </h3>
+        {sponsors.length === 0 ? <EmptyState message="No sponsors registered yet" /> : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {sponsors.map((sponsor: any) => (
+              <div key={sponsor.id} className="bg-white/70 p-5 rounded-2xl border border-white/80 hover:-translate-y-0.5 hover:shadow-md transition-all">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-orange to-orange-400 flex items-center justify-center text-white font-black text-sm">
+                    {sponsor.name?.[0] || 'S'}
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-gray-800">{sponsor.name}</h4>
+                    <p className="text-xs text-gray-500">{sponsor.sector || 'Various'}</p>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                    sponsor.verification_status === 'verified' ? 'bg-green-100 text-green-700' :
+                    sponsor.verification_status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                    'bg-gray-100 text-gray-600'
+                  }`}>
+                    {sponsor.verification_status || 'pending'}
+                  </span>
+                  <div className="text-right">
+                    <p className="text-xs text-gray-400">{sponsor.campaign_count || 0} campaigns</p>
+                    <p className="text-xs font-bold text-gray-700">₹{(sponsor.total_csr || 0).toLocaleString()}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

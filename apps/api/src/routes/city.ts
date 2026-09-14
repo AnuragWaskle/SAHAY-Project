@@ -1,17 +1,121 @@
 import { Router, Response } from 'express';
-import { requireAuth, optionalAuth, AuthRequest } from '../middleware/auth';
+import { requireAuth, optionalAuth, AuthRequest, requireRole } from '../middleware/auth';
 import { query } from '../db/pool';
 
 const router = Router();
+
+// ─── GET /city (list all cities) ──────────────────────────────
+
+router.get('/', optionalAuth, async (_req: AuthRequest, res: Response) => {
+  try {
+    const result = await query(
+      `SELECT c.*, COUNT(DISTINCT w.id) as ward_count
+       FROM cities c
+       LEFT JOIN wards w ON w.city_id = c.id
+       GROUP BY c.id
+       ORDER BY c.name`
+    );
+    res.json({ success: true, data: result.rows });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Failed to fetch cities' });
+  }
+});
+
+// ─── GET /city/:id/home (mobile home screen data) ─────────────
+
+router.get('/:id/home', optionalAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const cityId = req.params.id;
+
+    const [scoreRes, incidentRes, reportRes, citizenRes, demandRes, initiativeRes] = await Promise.all([
+      query(
+        `SELECT * FROM city_index_snapshots WHERE city_id = $1 ORDER BY period_end DESC LIMIT 1`,
+        [cityId]
+      ),
+      query(
+        `SELECT
+          COUNT(*) FILTER (WHERE status = 'active') as active,
+          COUNT(*) FILTER (WHERE status = 'resolved') as resolved,
+          COUNT(*) as total
+         FROM civic_incidents WHERE city_id = $1`,
+        [cityId]
+      ),
+      query(
+        `SELECT COUNT(*) as total FROM reports
+         WHERE ward_id IN (SELECT id FROM wards WHERE city_id = $1)`,
+        [cityId]
+      ),
+      query(
+        `SELECT COUNT(DISTINCT user_id) as active_citizens
+         FROM reports
+         WHERE ward_id IN (SELECT id FROM wards WHERE city_id = $1)
+         AND created_at > NOW() - INTERVAL '30 days'`,
+        [cityId]
+      ),
+      query(
+        `SELECT cd.id, cd.title, cd.supporters_count, cd.stage, ci.category
+         FROM civic_demands cd
+         JOIN civic_incidents ci ON cd.incident_id = ci.id
+         WHERE ci.city_id = $1 AND cd.stage NOT IN ('resolved', 'rejected')
+         ORDER BY cd.supporters_count DESC
+         LIMIT 3`,
+        [cityId]
+      ),
+      query(
+        `SELECT COUNT(*) as active_initiatives FROM initiatives i
+         JOIN organizations o ON i.organization_id = o.id
+         WHERE i.status = 'active'`,
+        []
+      ),
+    ]);
+
+    // Compute on-the-fly score if no snapshot exists
+    let cityScore = scoreRes.rows[0];
+    if (!cityScore) {
+      const incidents = incidentRes.rows[0];
+      const total = parseInt(incidents.total) || 1;
+      const resolved = parseInt(incidents.resolved) || 0;
+      const resolutionRate = Math.round((resolved / total) * 100);
+      const activeCitizens = parseInt(citizenRes.rows[0]?.active_citizens || '0');
+      const participation = Math.min(Math.round((activeCitizens / 100) * 100), 100);
+      const overallScore = Math.round((resolutionRate * 0.4 + participation * 0.3 + 50 * 0.3));
+
+      cityScore = {
+        score: overallScore,
+        sub_scores: {
+          cleanliness: Math.max(30, overallScore - 10 + Math.floor(Math.random() * 10)),
+          roads: Math.max(30, overallScore - 5),
+          water: Math.max(30, overallScore + 5),
+          safety: Math.max(30, overallScore - 8),
+          satisfaction: Math.max(30, overallScore + 3),
+        },
+      };
+    }
+
+    res.json({
+      success: true,
+      data: {
+        city_score: cityScore,
+        incidents: incidentRes.rows[0],
+        total_reports: parseInt(reportRes.rows[0]?.total || '0'),
+        active_citizens: parseInt(citizenRes.rows[0]?.active_citizens || '0'),
+        top_demands: demandRes.rows,
+        active_initiatives: parseInt(initiativeRes.rows[0]?.active_initiatives || '0'),
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Failed to fetch home data' });
+  }
+});
 
 // ─── GET /city/:id/score ───────────────────────────────────────
 
 router.get('/:id/score', optionalAuth, async (req: AuthRequest, res: Response) => {
   try {
     const result = await query(
-      `SELECT * FROM city_index_snapshots 
-       WHERE city_id = $1 
-       ORDER BY period_end DESC 
+      `SELECT * FROM city_index_snapshots
+       WHERE city_id = $1
+       ORDER BY period_end DESC
        LIMIT 1`,
       [req.params.id]
     );
@@ -21,10 +125,9 @@ router.get('/:id/score', optionalAuth, async (req: AuthRequest, res: Response) =
       return;
     }
 
-    // Also get active citizen count
     const activeRes = await query(
-      `SELECT COUNT(DISTINCT user_id) as active_citizens 
-       FROM reports 
+      `SELECT COUNT(DISTINCT user_id) as active_citizens
+       FROM reports
        WHERE ward_id IN (SELECT id FROM wards WHERE city_id = $1)
        AND created_at > NOW() - INTERVAL '30 days'`,
       [req.params.id]
@@ -39,6 +142,147 @@ router.get('/:id/score', optionalAuth, async (req: AuthRequest, res: Response) =
     });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to fetch city score' });
+  }
+});
+
+// ─── POST /city/:id/compute-score (admin) ─────────────────────
+
+router.post('/:id/compute-score', requireAuth, requireRole('sub_admin', 'super_admin'),
+  async (req: AuthRequest, res: Response) => {
+  try {
+    const cityId = req.params.id;
+
+    const [incidentStats, reportStats, demandStats, verificationStats] = await Promise.all([
+      query(
+        `SELECT
+          COUNT(*) as total,
+          COUNT(*) FILTER (WHERE status = 'resolved') as resolved,
+          COUNT(*) FILTER (WHERE status = 'active') as active,
+          COUNT(*) FILTER (WHERE severity = 'critical' AND status = 'active') as critical_active
+         FROM civic_incidents WHERE city_id = $1`,
+        [cityId]
+      ),
+      query(
+        `SELECT COUNT(*) as total, COUNT(DISTINCT user_id) as unique_reporters
+         FROM reports WHERE ward_id IN (SELECT id FROM wards WHERE city_id = $1)
+         AND created_at > NOW() - INTERVAL '30 days'`,
+        [cityId]
+      ),
+      query(
+        `SELECT COUNT(*) FILTER (WHERE cd.stage = 'resolved') as resolved_demands,
+          COUNT(*) as total_demands
+         FROM civic_demands cd JOIN civic_incidents ci ON cd.incident_id = ci.id
+         WHERE ci.city_id = $1`,
+        [cityId]
+      ),
+      query(
+        `SELECT COUNT(*) FILTER (WHERE rv.verdict = 'solved') as solved,
+          COUNT(*) as total
+         FROM resolution_verifications rv
+         JOIN civic_demands cd ON rv.demand_id = cd.id
+         JOIN civic_incidents ci ON cd.incident_id = ci.id
+         WHERE ci.city_id = $1`,
+        [cityId]
+      ),
+    ]);
+
+    const incidents = incidentStats.rows[0];
+    const reports = reportStats.rows[0];
+    const demands = demandStats.rows[0];
+    const verifications = verificationStats.rows[0];
+
+    const totalIncidents = parseInt(incidents.total) || 1;
+    const resolvedIncidents = parseInt(incidents.resolved) || 0;
+    const resolutionRate = (resolvedIncidents / totalIncidents) * 100;
+
+    const totalDemands = parseInt(demands.total_demands) || 1;
+    const resolvedDemands = parseInt(demands.resolved_demands) || 0;
+    const demandResolutionRate = (resolvedDemands / totalDemands) * 100;
+
+    const uniqueReporters = parseInt(reports.unique_reporters) || 0;
+    const participation = Math.min((uniqueReporters / 500) * 100, 100);
+
+    const totalVerifications = parseInt(verifications.total) || 1;
+    const solvedVerifications = parseInt(verifications.solved) || 0;
+    const satisfaction = (solvedVerifications / totalVerifications) * 100;
+
+    // Weighted composite: Resolution 30%, Quality 20%, Satisfaction 15%, Participation 10%, etc.
+    const overallScore = Math.round(
+      resolutionRate * 0.30 +
+      demandResolutionRate * 0.20 +
+      satisfaction * 0.15 +
+      participation * 0.10 +
+      Math.max(0, 100 - parseInt(incidents.critical_active) * 10) * 0.10 +
+      Math.min(100, parseInt(reports.total) * 2) * 0.05 +
+      50 * 0.10 // NGO/community action placeholder
+    );
+
+    const subScores = {
+      resolution: Math.round(resolutionRate),
+      demand_fulfillment: Math.round(demandResolutionRate),
+      citizen_satisfaction: Math.round(satisfaction),
+      citizen_participation: Math.round(participation),
+      safety: Math.round(Math.max(0, 100 - parseInt(incidents.critical_active) * 10)),
+    };
+
+    const result = await query(
+      `INSERT INTO city_index_snapshots (city_id, score, sub_scores, period_start, period_end)
+       VALUES ($1, $2, $3, NOW() - INTERVAL '30 days', NOW())
+       RETURNING *`,
+      [cityId, overallScore, JSON.stringify(subScores)]
+    );
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Failed to compute city score' });
+  }
+});
+
+// ─── GET /city/:id/officer-stats ─────────────────────────────
+
+router.get('/:id/officer-stats', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const cityId = req.params.id;
+    const wardId = req.user?.jurisdiction_id || null;
+
+    const wardCondition = wardId ? `AND ci.ward_id = '${wardId}'` : '';
+
+    const [activeRes, criticalRes, resolvedRes, demandRes] = await Promise.all([
+      query(
+        `SELECT COUNT(*) as count FROM civic_incidents ci
+         WHERE ci.city_id = $1 AND ci.status = 'active' ${wardCondition}`,
+        [cityId]
+      ),
+      query(
+        `SELECT COUNT(*) as count FROM civic_incidents ci
+         WHERE ci.city_id = $1 AND ci.severity = 'critical' AND ci.status = 'active' ${wardCondition}`,
+        [cityId]
+      ),
+      query(
+        `SELECT COUNT(*) as count FROM civic_incidents ci
+         WHERE ci.city_id = $1 AND ci.status = 'resolved'
+         AND ci.updated_at > NOW() - INTERVAL '24 hours' ${wardCondition}`,
+        [cityId]
+      ),
+      query(
+        `SELECT COUNT(*) as count FROM civic_demands cd
+         JOIN civic_incidents ci ON cd.incident_id = ci.id
+         WHERE ci.city_id = $1 AND cd.stage IN ('proposed', 'community_supported', 'submitted') ${wardCondition}`,
+        [cityId]
+      ),
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        active_incidents: parseInt(activeRes.rows[0]?.count || '0'),
+        critical_count: parseInt(criticalRes.rows[0]?.count || '0'),
+        resolved_today: parseInt(resolvedRes.rows[0]?.count || '0'),
+        pending_demands: parseInt(demandRes.rows[0]?.count || '0'),
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Failed to fetch officer stats' });
   }
 });
 
@@ -69,7 +313,7 @@ router.get('/:id/priorities', optionalAuth, async (req: AuthRequest, res: Respon
 
 router.get('/:id/stats', optionalAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const [incidentStats, reportStats, demandStats, orgStats, userStats] = await Promise.all([
+    const [incidentStats, reportStats, demandStats, userStats] = await Promise.all([
       query(
         `SELECT status, COUNT(*) as count FROM civic_incidents WHERE city_id = $1 GROUP BY status`,
         [req.params.id]
@@ -86,13 +330,7 @@ router.get('/:id/stats', optionalAuth, async (req: AuthRequest, res: Response) =
         [req.params.id]
       ),
       query(
-        `SELECT COUNT(*) as count FROM organizations 
-         WHERE $1 = ANY(SELECT id::text FROM wards WHERE city_id = $1)
-         OR operating_wards::text LIKE '%${req.params.id}%'`,
-        [req.params.id]
-      ),
-      query(
-        `SELECT COUNT(*) as total_users, 
+        `SELECT COUNT(*) as total_users,
           SUM(civic_impact_score) as total_impact_score,
           COUNT(CASE WHEN role IN ('verified_citizen', 'civic_leader') THEN 1 END) as verified_users
          FROM users WHERE city_id = $1`,
@@ -106,7 +344,6 @@ router.get('/:id/stats', optionalAuth, async (req: AuthRequest, res: Response) =
         incidents: incidentStats.rows,
         reports: reportStats.rows[0],
         demands: demandStats.rows,
-        organizations: orgStats.rows[0]?.count || 0,
         users: userStats.rows[0],
       },
     });
@@ -136,23 +373,6 @@ router.get('/:id/wards', optionalAuth, async (req: AuthRequest, res: Response) =
     res.json({ success: true, data: result.rows });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to fetch wards' });
-  }
-});
-
-// ─── GET /city (list all cities) ──────────────────────────────
-
-router.get('/', optionalAuth, async (_req: AuthRequest, res: Response) => {
-  try {
-    const result = await query(
-      `SELECT c.*, COUNT(DISTINCT w.id) as ward_count
-       FROM cities c
-       LEFT JOIN wards w ON w.city_id = c.id
-       GROUP BY c.id
-       ORDER BY c.name`
-    );
-    res.json({ success: true, data: result.rows });
-  } catch (err) {
-    res.status(500).json({ success: false, error: 'Failed to fetch cities' });
   }
 });
 

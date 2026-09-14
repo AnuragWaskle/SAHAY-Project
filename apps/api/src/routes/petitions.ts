@@ -10,7 +10,7 @@ router.get('/', optionalAuth, async (req: AuthRequest, res: Response) => {
     const { city_id, demand_id } = req.query as Record<string, string>;
     const params: unknown[] = [];
     const conditions: string[] = [];
-    let p = 1;
+    let p = 2;
 
     if (city_id) {
       conditions.push(`p.city_id = $${p++}`);

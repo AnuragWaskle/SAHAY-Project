@@ -1,15 +1,16 @@
-import React, { useState, createContext } from 'react';
+import React, { useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { View, StyleSheet } from 'react-native';
-import { MapPin, PlusCircle, User, Compass, Target } from 'lucide-react-native';
+import { Home, PlusCircle, User, Compass, Target } from 'lucide-react-native';
 
-export const AuthContext = createContext<{ logout: () => void }>({ logout: () => {} });
+import { AuthContext } from './src/context/AuthContext';
 import './src/global.css';
 import './src/i18n/config';
 
+import HomeScreen from './src/screens/HomeScreen';
 import FeedScreen from './src/screens/FeedScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import ReportScreen from './src/screens/ReportScreen';
@@ -20,6 +21,13 @@ import NotificationsScreen from './src/screens/NotificationsScreen';
 import MyReportsScreen from './src/screens/MyReportsScreen';
 import VerifyScreen from './src/screens/VerifyScreen';
 import IncidentDetailScreen from './src/screens/IncidentDetailScreen';
+import DemandDetailScreen from './src/screens/DemandDetailScreen';
+import InitiativeDetailScreen from './src/screens/InitiativeDetailScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
+import ImpactWalletScreen from './src/screens/ImpactWalletScreen';
+import RewardMarketplaceScreen from './src/screens/RewardMarketplaceScreen';
+import MissionDetailScreen from './src/screens/MissionDetailScreen';
+import CirclesScreen from './src/screens/CirclesScreen';
 import { setAuthToken } from './src/api/client';
 
 const Tab = createBottomTabNavigator();
@@ -56,13 +64,13 @@ function MainTabs() {
       }}
     >
       <Tab.Screen
-        name="Feed"
-        component={FeedScreen}
+        name="Home"
+        component={HomeScreen}
         options={{
           tabBarLabel: 'Home',
           tabBarIcon: ({ color, focused }) => (
             <View style={focused ? { backgroundColor: '#FFF0ED', padding: 8, borderRadius: 14 } : { padding: 8 }}>
-              <MapPin color={color} size={22} />
+              <Home color={color} size={22} />
             </View>
           )
         }}
@@ -174,6 +182,46 @@ export default function App() {
           <Stack.Screen
             name="IncidentDetail"
             component={IncidentDetailScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="DemandDetail"
+            component={DemandDetailScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="InitiativeDetail"
+            component={InitiativeDetailScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Settings"
+            component={SettingsScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Feed"
+            component={FeedScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="ImpactWallet"
+            component={ImpactWalletScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="RewardMarketplace"
+            component={RewardMarketplaceScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="MissionDetail"
+            component={MissionDetailScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Circles"
+            component={CirclesScreen}
             options={{ headerShown: false }}
           />
         </Stack.Navigator>

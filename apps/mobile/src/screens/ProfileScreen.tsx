@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useContext } from 'react';
 import { View, Text, ScrollView, ActivityIndicator, TouchableOpacity } from 'react-native';
-import { Award, Star, ChevronRight, Shield, Bell, FileText, LogOut, Zap, Target } from 'lucide-react-native';
+import { Award, Star, ChevronRight, Shield, Bell, FileText, LogOut, Zap, Target, Wallet } from 'lucide-react-native';
 import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
 import apiClient from '../api/client';
-import { AuthContext } from '../../App';
+import { AuthContext } from '../context/AuthContext';
 
 export default function ProfileScreen() {
   const { t } = useTranslation();
@@ -101,9 +101,29 @@ export default function ProfileScreen() {
         </View>
       </View>
 
+      {/* Impact Wallet CTA */}
+      <TouchableOpacity
+        onPress={() => navigation.navigate('ImpactWallet')}
+        className="mx-5 mt-5 mb-2 bg-emerald-600 p-4 rounded-[22px] flex-row items-center"
+        style={{ elevation: 6, shadowColor: '#16A34A', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 10 }}
+        activeOpacity={0.85}
+      >
+        <View className="w-11 h-11 rounded-2xl bg-white/20 items-center justify-center">
+          <Wallet size={22} color="#FFF" />
+        </View>
+        <View className="ml-3 flex-1">
+          <Text className="font-black text-white text-base">Impact Wallet</Text>
+          <Text className="text-white/70 font-medium text-xs">View credits, rewards & trust score</Text>
+        </View>
+        <View className="bg-white/20 px-3 py-1.5 rounded-xl">
+          <Text className="text-white font-black text-xs">{profile?.civic_credits || 0} CC</Text>
+        </View>
+      </TouchableOpacity>
+
       {/* Stats Cards - Overlapping layout */}
-      <View className="flex-row px-5 mt-6 mb-6">
-        <View
+      <View className="flex-row px-5 mt-4 mb-6">
+        <TouchableOpacity
+          onPress={() => navigation.navigate('ImpactWallet')}
           className="flex-1 bg-white p-5 rounded-[24px] mr-2 items-center"
           style={{
             elevation: 6,
@@ -114,13 +134,14 @@ export default function ProfileScreen() {
             borderWidth: 1,
             borderColor: '#FFF0ED',
           }}
+          activeOpacity={0.8}
         >
           <View className="w-10 h-10 rounded-2xl bg-orange-50 items-center justify-center mb-2">
             <Zap size={20} color="#FF7E67" />
           </View>
           <Text className="text-2xl font-black text-brand-orange">{profile?.civic_impact_score || 0}</Text>
           <Text className="text-gray-400 font-bold text-[10px] uppercase tracking-wider mt-1">Impact</Text>
-        </View>
+        </TouchableOpacity>
         <View
           className="flex-1 bg-white p-5 rounded-[24px] mx-1 items-center"
           style={{
@@ -230,6 +251,7 @@ export default function ProfileScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
+            onPress={() => navigation.navigate('Settings')}
             className="flex-row items-center p-5 border-b border-gray-50"
             activeOpacity={0.7}
           >

@@ -3,6 +3,8 @@ import { requireAuth, optionalAuth, AuthRequest, requireRole } from '../middlewa
 import { query, transaction } from '../db/pool';
 import { z } from 'zod';
 import { io } from '../index';
+import { createNotification } from './notifications';
+import { awardCredits } from './credits';
 
 const router = Router();
 
@@ -41,7 +43,9 @@ router.get('/', optionalAuth, async (req: AuthRequest, res: Response) => {
         `SELECT cd.*, ci.title as incident_title, ci.category, ci.severity,
           ST_X(ci.location_center) as lng, ST_Y(ci.location_center) as lat,
           d.name as department_name, u.name as officer_name,
-          w.name as ward_name
+          w.name as ward_name,
+          (SELECT evidence_before FROM work_orders WHERE demand_id = cd.id ORDER BY created_at DESC LIMIT 1) as evidence_before,
+          (SELECT evidence_after FROM work_orders WHERE demand_id = cd.id ORDER BY created_at DESC LIMIT 1) as evidence_after
          FROM civic_demands cd
          JOIN civic_incidents ci ON cd.incident_id = ci.id
          LEFT JOIN departments d ON cd.department_id = d.id
@@ -212,8 +216,11 @@ router.post('/:id/support', requireAuth, async (req: AuthRequest, res: Response)
       [req.params.id]
     );
 
-    // Update civic impact score
+    // Award civic credits for supporting demand
     await query('UPDATE users SET civic_impact_score = civic_impact_score + 2 WHERE id = $1', [req.user!.id]);
+    try {
+      await awardCredits(req.user!.id, 'community_contribution', 'Supported civic demand', 'demand', req.params.id as string);
+    } catch {}
 
     // Auto-promote if threshold reached
     const demand = await query('SELECT stage, supporters_count FROM civic_demands WHERE id = $1', [req.params.id]);
@@ -224,6 +231,74 @@ router.post('/:id/support', requireAuth, async (req: AuthRequest, res: Response)
     res.json({ success: true, data: { supporters_count: countRes.rows[0]?.supporters_count } });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to support demand' });
+  }
+});
+
+// ─── POST /demands/:id/boost (crowdfund matched CSR funding) ──
+router.post('/:id/boost', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const demandId = req.params.id;
+    const userId = req.user!.id;
+    const { credits } = req.body;
+
+    const amount = parseInt(credits);
+    if (isNaN(amount) || amount <= 0) {
+      res.status(400).json({ success: false, error: 'Credits amount must be a positive integer' });
+      return;
+    }
+
+    const result = await transaction(async (q) => {
+      // 1. Fetch user's credit balance
+      const userRes = await q('SELECT civic_credits FROM users WHERE id = $1', [userId]);
+      const currentCredits = userRes.rows[0]?.civic_credits || 0;
+      if (currentCredits < amount) {
+        throw new Error('Insufficient Civic Credits balance to boost this project');
+      }
+
+      // 2. Fetch the demand
+      const demandRes = await q('SELECT * FROM civic_demands WHERE id = $1', [demandId]);
+      if (demandRes.rowCount === 0) {
+        throw new Error('Civic demand not found');
+      }
+
+      const demand = demandRes.rows[0];
+
+      // Calculate matched cash matching fund: e.g. 1 Credit = 10 INR CSR match
+      const matchedCash = amount * 10;
+      const newBalance = currentCredits - amount;
+
+      // 3. Deduct user's credits
+      await q('UPDATE users SET civic_credits = $1 WHERE id = $2', [newBalance, userId]);
+
+      // 4. Update demand's boost statistics
+      const updatedDemand = await q(
+        `UPDATE civic_demands
+         SET boost_credits = COALESCE(boost_credits, 0) + $1,
+             matching_fund = COALESCE(matching_fund, 0) + $2,
+             updated_at = NOW()
+         WHERE id = $3
+         RETURNING boost_credits, matching_fund`,
+        [amount, matchedCash, demandId]
+      );
+
+      // 5. Insert ledger record for debiting credits
+      await q(
+        `INSERT INTO civic_credits_ledger (user_id, action, credits, balance_after, reason, source_type, source_id)
+         VALUES ($1, 'redemption', $2, $3, 'Boosted civic demand project', 'demand', $4)`,
+        [userId, -amount, newBalance, demandId]
+      );
+
+      return updatedDemand.rows[0];
+    });
+
+    res.json({
+      success: true,
+      data: result,
+      message: `Successfully boosted project with ${amount} credits! Matched ₹${amount * 10} from Corporate CSR matching fund.`
+    });
+  } catch (err: any) {
+    const statusCode = ['Insufficient Civic Credits balance to boost this project', 'Civic demand not found'].includes(err.message) ? 400 : 500;
+    res.status(statusCode).json({ success: false, error: err.message || 'Failed to boost civic demand' });
   }
 });
 
@@ -290,8 +365,11 @@ router.post('/:id/verify', requireAuth, async (req: AuthRequest, res: Response) 
       [req.params.id, req.user!.id, verdict, JSON.stringify(evidence_urls), comment || null]
     );
 
-    // Award points
+    // Award points and civic credits
     await query('UPDATE users SET civic_impact_score = civic_impact_score + 10 WHERE id = $1', [req.user!.id]);
+    try {
+      await awardCredits(req.user!.id, 'resolution_verify', 'Verified resolution outcome', 'demand', req.params.id as string);
+    } catch {}
 
     // Check if enough verifications to auto-resolve
     const verRes = await query(
@@ -329,6 +407,39 @@ async function advanceStage(
      VALUES ($1, $2, $3, $4, $5, $6)`,
     [demandId, actorId, from, to, note || null, JSON.stringify(evidence || [])]
   );
+
+  const STAGE_LABELS: Record<string, string> = {
+    community_supported: 'Community Supported',
+    submitted: 'Submitted to Authority',
+    accepted: 'Accepted by Department',
+    work_planned: 'Work Planned',
+    in_progress: 'Work In Progress',
+    completed: 'Marked Completed',
+    citizen_verification: 'Awaiting Citizen Verification',
+    resolved: 'Resolved',
+    reopened: 'Reopened',
+  };
+
+  try {
+    const supporters = await query(
+      `SELECT user_id FROM demand_supporters WHERE demand_id = $1`,
+      [demandId]
+    );
+    const demandInfo = await query(`SELECT title FROM civic_demands WHERE id = $1`, [demandId]);
+    const title = demandInfo.rows[0]?.title || 'A demand you supported';
+
+    for (const row of supporters.rows) {
+      if (row.user_id !== actorId) {
+        await createNotification(
+          row.user_id,
+          'demand_update',
+          `Demand Update: ${STAGE_LABELS[to] || to}`,
+          `"${title}" has progressed to ${STAGE_LABELS[to] || to}.`,
+          { demand_id: demandId, stage: to }
+        );
+      }
+    }
+  } catch {}
 }
 
 export { router as demandsRouter };

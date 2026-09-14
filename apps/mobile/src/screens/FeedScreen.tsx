@@ -306,13 +306,14 @@ export default function FeedScreen() {
                         <Text className="font-black text-blue-700 ml-1.5 text-xs">Demand</Text>
                       </TouchableOpacity>
                     ) : (
-                      <View
+                      <TouchableOpacity
+                        onPress={() => navigation.navigate('DemandDetail', { demandId: item.demand_id })}
                         className="flex-row items-center bg-green-50 px-4 py-2.5 rounded-2xl mr-2"
                         style={{ borderWidth: 1, borderColor: '#BBF7D0' }}
                       >
                         <Megaphone color="#16A34A" size={14} />
                         <Text className="font-black text-green-700 ml-1.5 text-xs">Active</Text>
-                      </View>
+                      </TouchableOpacity>
                     )}
 
                     <TouchableOpacity className="flex-row items-center bg-gray-50 p-2.5 rounded-2xl ml-auto" style={{ borderWidth: 1, borderColor: '#F3F4F6' }}>

@@ -17,6 +17,7 @@ import {
   TrendingUp,
 } from 'lucide-react-native';
 import apiClient from '../api/client';
+import { useNavigation } from '@react-navigation/native';
 
 type Mission = {
   id: string;
@@ -41,6 +42,7 @@ type LeaderboardEntry = {
 type Tab = 'missions' | 'leaderboard';
 
 export default function ActScreen() {
+  const navigation = useNavigation<any>();
   const [activeTab, setActiveTab] = useState<Tab>('missions');
   const [missions, setMissions] = useState<Mission[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
@@ -122,6 +124,19 @@ export default function ActScreen() {
     }
   };
 
+  const getCreditsForCategory = (category: string) => {
+    switch (category.toLowerCase()) {
+      case 'tree_hazard':
+        return 50;
+      case 'garbage':
+        return 30;
+      case 'safety':
+        return 40;
+      default:
+        return 25;
+    }
+  };
+
   const getStatusBorderColor = (status: Mission['status']) => {
     switch (status) {
       case 'active':
@@ -188,19 +203,26 @@ export default function ActScreen() {
           const clampedProgress = Math.min(progress, 100);
 
           return (
-            <View
+            <TouchableOpacity
               key={mission.id}
+              onPress={() => navigation.navigate('MissionDetail', { missionId: mission.id })}
               className={`mb-4 rounded-2xl border-l-4 bg-white p-4 shadow-sm ${getStatusBorderColor(mission.status)}`}
+              activeOpacity={0.8}
             >
               <View className="flex-row items-start justify-between">
                 <View className="flex-1 mr-3">
-                  <View className="flex-row items-center mb-1">
-                    <View className={`px-2 py-0.5 rounded-full ${getStatusColor(mission.status)}`}>
-                      <Text className="text-white text-xs font-medium capitalize">
-                        {mission.status}
-                      </Text>
+                  <View className="flex-row items-center justify-between mb-1">
+                    <View className="flex-row items-center">
+                      <View className={`px-2 py-0.5 rounded-full ${getStatusColor(mission.status)}`}>
+                        <Text className="text-white text-xs font-medium capitalize">
+                          {mission.status}
+                        </Text>
+                      </View>
+                      <Text className="ml-2 text-xs text-gray-400 capitalize">{mission.category.replace('_', ' ')}</Text>
                     </View>
-                    <Text className="ml-2 text-xs text-gray-400 capitalize">{mission.category}</Text>
+                    <View className="bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                      <Text className="text-emerald-600 text-xs font-extrabold">+{getCreditsForCategory(mission.category)} CC</Text>
+                    </View>
                   </View>
                   <Text className="text-base font-bold text-gray-800 mt-1">{mission.title}</Text>
                   <Text className="text-sm text-gray-500 mt-1" numberOfLines={2}>
@@ -268,7 +290,7 @@ export default function ActScreen() {
                   </View>
                 )}
               </View>
-            </View>
+            </TouchableOpacity>
           );
         })}
       </View>

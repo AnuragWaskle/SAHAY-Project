@@ -24,7 +24,7 @@ In the third terminal, start the React Web application:
 cd apps/web
 npm run dev
 ```
-
+cd cd
 ## 4. Mobile Application
 In the fourth terminal, start the Expo mobile app:
 ```bash

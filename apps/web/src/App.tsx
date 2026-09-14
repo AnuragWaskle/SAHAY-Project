@@ -7,6 +7,7 @@ import OfficerConsole from './components/OfficerConsole';
 import NGOHub from './components/NGOHub';
 import RepDashboard from './components/RepDashboard';
 import AdminDashboard from './components/AdminDashboard';
+import SponsorPortal from './components/SponsorPortal';
 
 const getDashboardRoute = (role: string | null) => {
   switch (role) {
@@ -14,6 +15,7 @@ const getDashboardRoute = (role: string | null) => {
     case 'ngo': return '/ngo';
     case 'elected_representative': return '/rep';
     case 'super_admin': return '/admin';
+    case 'company_csr': return '/sponsor';
     default: return '/login';
   }
 };
@@ -41,6 +43,7 @@ const Login = ({ setRole }: { setRole: (role: string) => void }) => {
           <button onClick={() => handleLogin('municipal_officer', 'demo_officer_1')} className="block w-full p-4 rounded-2xl bg-gradient-to-r from-brand-blue to-blue-500 text-white font-bold text-lg hover:-translate-y-1 hover:shadow-lg transition-all duration-300">Login as Officer</button>
           <button onClick={() => handleLogin('ngo', 'demo_ngo_1')} className="block w-full p-4 rounded-2xl bg-gradient-to-r from-brand-green to-emerald-500 text-white font-bold text-lg hover:-translate-y-1 hover:shadow-lg transition-all duration-300">Login as NGO</button>
           <button onClick={() => handleLogin('elected_representative', 'demo_elected')} className="block w-full p-4 rounded-2xl bg-gradient-to-r from-brand-indigo to-purple-600 text-white font-bold text-lg hover:-translate-y-1 hover:shadow-lg transition-all duration-300">Login as Rep</button>
+          <button onClick={() => handleLogin('company_csr', 'demo_sponsor_1')} className="block w-full p-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-500 text-white font-bold text-lg hover:-translate-y-1 hover:shadow-lg transition-all duration-300">Login as Sponsor</button>
           <button onClick={() => handleLogin('super_admin', 'demo_super_admin')} className="block w-full p-4 rounded-2xl bg-gradient-to-r from-gray-700 to-gray-900 text-white font-bold text-lg hover:-translate-y-1 hover:shadow-lg transition-all duration-300">Login as Admin</button>
         </div>
         <div id="recaptcha-container"></div>
@@ -124,6 +127,7 @@ const App = () => {
           <Route path="/ngo/*" element={role === 'ngo' ? <NGOHub /> : <Navigate to="/login" />} />
           <Route path="/rep/*" element={role === 'elected_representative' ? <RepDashboard /> : <Navigate to="/login" />} />
           <Route path="/admin/*" element={role === 'super_admin' ? <AdminDashboard /> : <Navigate to="/login" />} />
+          <Route path="/sponsor/*" element={role === 'company_csr' ? <SponsorPortal /> : <Navigate to="/login" />} />
           <Route path="*" element={<Navigate to={getDashboardRoute(role)} replace />} />
         </Routes>
       </main>

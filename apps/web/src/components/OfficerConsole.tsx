@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import apiClient from '../api/client';
-import { Activity, ShieldAlert, CheckCircle, Clock, Map as MapIcon, Image as ImageIcon } from 'lucide-react';
+import { Activity, ShieldAlert, CheckCircle, Clock, Map as MapIcon, Image as ImageIcon, User, ClipboardList } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 
@@ -13,18 +13,97 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
+const DEPARTMENTS = [
+  { id: '20000000-0000-0000-0000-000000000001', name: 'Roads & Infrastructure' },
+  { id: '20000000-0000-0000-0000-000000000002', name: 'Drainage & Sewage' },
+  { id: '20000000-0000-0000-0000-000000000003', name: 'Solid Waste Management' },
+  { id: '20000000-0000-0000-0000-000000000004', name: 'Water Supply' },
+  { id: '20000000-0000-0000-0000-000000000005', name: 'Electrical & Street Lighting' },
+  { id: '20000000-0000-0000-0000-000000000006', name: 'Parks & Gardens' },
+  { id: '20000000-0000-0000-0000-000000000007', name: 'Environment & Pollution' },
+  { id: '20000000-0000-0000-0000-000000000008', name: 'Public Safety' },
+  { id: '20000000-0000-0000-0000-000000000009', name: 'Town Planning' },
+  { id: '20000000-0000-0000-0000-000000000010', name: 'Health & Sanitation' }
+];
+
 const OfficerConsole = () => {
   const { t } = useTranslation();
   const [stats, setStats] = useState({ open: 0, critical: 0, resolved: 0 });
   const [incidents, setIncidents] = useState<any[]>([]);
-  const [resolvingIncident, setResolvingIncident] = useState<string | null>(null);
+  const [resolvingIncident, setResolvingIncident] = useState<any | null>(null);
+  
+  // Action state tabs
+  const [modalTab, setModalTab] = useState<'resolve' | 'dispatch'>('resolve');
+  
+  // Direct resolution states
   const [resolving, setResolving] = useState(false);
+  const [resolvePhoto, setResolvePhoto] = useState<File | null>(null);
+
+  // Contractor dispatch states
+  const [contractors, setContractors] = useState<any[]>([]);
+  const [selectedDept, setSelectedDept] = useState(DEPARTMENTS[0].id);
+  const [selectedContractor, setSelectedContractor] = useState('');
+  const [dispatchNotes, setDispatchNotes] = useState('');
+  const [dispatching, setDispatching] = useState(false);
+
+  const fetchData = async () => {
+    try {
+      const [incidentRes, statsRes, contractorsRes] = await Promise.all([
+        apiClient.get('/incidents'),
+        apiClient.get('/city/00000000-0000-0000-0000-000000000001/officer-stats').catch(() => null),
+        apiClient.get('/users?role=citizen').catch(() => null),
+      ]);
+      
+      const items = incidentRes.data.data?.items || incidentRes.data.data || [];
+      const sorted = items.sort((a: any, b: any) => b.priority_score - a.priority_score);
+      setIncidents(sorted);
+
+      if (contractorsRes?.data?.success) {
+        const list = contractorsRes.data.data.items || [];
+        setContractors(list);
+        if (list.length > 0) {
+          setSelectedContractor(list[0].id);
+        }
+      }
+
+      if (statsRes?.data?.data) {
+        const s = statsRes.data.data;
+        setStats({
+          open: s.active_incidents || sorted.length,
+          critical: s.critical_count || sorted.filter((i: any) => i.severity === 'CRITICAL').length,
+          resolved: s.resolved_today || 0,
+        });
+      } else {
+        setStats({
+          open: sorted.length,
+          critical: sorted.filter((i: any) => i.severity === 'CRITICAL').length || 0,
+          resolved: 0,
+        });
+      }
+    } catch (err) {
+      console.error("Failed to fetch incidents", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
 
   const handleResolve = async (id: string) => {
     setResolving(true);
     try {
-      await apiClient.patch(`/incidents/${id}`, { status: 'resolved' });
+      let photoUrl = null;
+      if (resolvePhoto) {
+        const formData = new FormData();
+        formData.append('file', resolvePhoto);
+        const uploadRes = await apiClient.post('/upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        photoUrl = uploadRes.data?.data?.url || null;
+      }
+      await apiClient.patch(`/incidents/${id}`, { status: 'resolved', resolution_photo: photoUrl });
       setResolvingIncident(null);
+      setResolvePhoto(null);
       setStats(prev => ({ ...prev, resolved: prev.resolved + 1, open: Math.max(0, prev.open - 1) }));
       setIncidents(prev => prev.filter(i => i.id !== id));
     } catch (err) {
@@ -35,25 +114,52 @@ const OfficerConsole = () => {
     }
   };
 
-  useEffect(() => {
-    const fetchIncidents = async () => {
-      try {
-        const res = await apiClient.get('/incidents');
-        const items = res.data.data?.items || res.data.data || [];
-        const sorted = items.sort((a: any, b: any) => b.priority_score - a.priority_score);
-        setIncidents(sorted);
-        
-        setStats({
-          open: sorted.length,
-          critical: sorted.filter((i: any) => i.severity === 'CRITICAL').length || 0,
-          resolved: 12
+  const handleDispatchContractor = async () => {
+    if (!resolvingIncident) return;
+    if (!selectedContractor) {
+      alert('Please select an active contractor to assign.');
+      return;
+    }
+    if (!dispatchNotes.trim()) {
+      alert('Please enter dispatch execution notes for the field team.');
+      return;
+    }
+
+    setDispatching(true);
+    try {
+      // 1. Promote/Ensure incident has a Civic Demand first
+      const demandRes = await apiClient.post('/demands', {
+        incident_id: resolvingIncident.id,
+        title: `Resolution: ${resolvingIncident.title}`,
+        description: resolvingIncident.description,
+        affected_residents: 150,
+      });
+
+      if (demandRes.data?.success) {
+        const demandId = demandRes.data.data.id;
+
+        // 2. Dispatch work order
+        const woRes = await apiClient.post('/work-orders', {
+          demand_id: demandId,
+          department_id: selectedDept,
+          contractor_id: selectedContractor,
+          notes: dispatchNotes.trim(),
         });
-      } catch (err) {
-        console.error("Failed to fetch incidents", err);
+
+        if (woRes.data?.success) {
+          alert('Field Contractor successfully dispatched! Work Order has been created.');
+          setResolvingIncident(null);
+          setDispatchNotes('');
+          fetchData();
+        }
       }
-    };
-    fetchIncidents();
-  }, []);
+    } catch (err: any) {
+      console.error('Failed to dispatch contractor:', err);
+      alert(err?.response?.data?.error || 'Failed to dispatch contractor. Please verify permissions.');
+    } finally {
+      setDispatching(false);
+    }
+  };
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -131,10 +237,13 @@ const OfficerConsole = () => {
                   <p className="text-sm text-gray-600 truncate max-w-[250px] md:max-w-xs mt-1">{incident.description}</p>
                 </div>
                 <button 
-                  onClick={() => setResolvingIncident(incident.id)}
+                  onClick={() => {
+                    setResolvingIncident(incident);
+                    setModalTab('resolve');
+                  }}
                   className="bg-brand-blue text-white px-6 py-2.5 rounded-full font-bold hover:bg-blue-600 hover:shadow-lg hover:-translate-y-0.5 transition-all w-full sm:w-auto"
                 >
-                  Resolve
+                  Manage Action
                 </button>
               </div>
             ))}
@@ -150,7 +259,6 @@ const OfficerConsole = () => {
             Live Incident Map
           </h3>
           <div className="flex-1 rounded-3xl overflow-hidden border border-white/80 min-h-[400px] shadow-inner relative z-0">
-            {/* Center default to Bhopal (23.2599, 77.4126) */}
             <MapContainer center={[23.2599, 77.4126]} zoom={12} style={{ height: '100%', width: '100%', zIndex: 0 }}>
               <TileLayer
                 attribution='&copy; <a href="https://osm.org/copyright">OpenStreetMap</a>'
@@ -173,27 +281,114 @@ const OfficerConsole = () => {
         </div>
       </div>
       
-      {/* Resolve Modal */}
+      {/* Resolve / Dispatch Modal */}
       {resolvingIncident && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-gray-900/40 backdrop-blur-md animate-fade-in">
-          <div className="glass-dark p-10 rounded-4xl max-w-md w-full mx-4 shadow-2xl border border-white/60 transform transition-all">
-            <h3 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-brand-blue to-blue-500 mb-3">Resolve Incident</h3>
-            <p className="text-base text-gray-600 mb-8 font-medium">Upload an "After" photo to verify the resolution of this incident. The AI engine will analyze the image.</p>
+          <div className="glass-dark p-8 rounded-4xl max-w-lg w-full mx-4 shadow-2xl border border-white/60 transform transition-all">
             
-            <div className="border-2 border-dashed border-brand-blue/40 rounded-3xl p-10 mb-8 flex flex-col items-center justify-center bg-white/40 cursor-pointer hover:bg-white/60 hover:border-brand-blue transition-all group">
-              <ImageIcon size={48} className="text-brand-blue mb-4 opacity-50 group-hover:opacity-100 group-hover:scale-110 transition-all" />
-              <span className="text-base font-bold text-gray-800">Click to upload photo</span>
-              <span className="text-sm text-gray-500 mt-1 font-medium">JPG or PNG (max 5MB)</span>
-            </div>
-            
-            <div className="flex space-x-4">
-              <button onClick={() => setResolvingIncident(null)} disabled={resolving} className="flex-1 py-3.5 rounded-2xl font-bold text-gray-600 bg-white hover:bg-gray-50 transition-colors shadow-sm disabled:opacity-50">
-                Cancel
+            {/* Modal Tabs */}
+            <div className="flex border-b border-gray-150 mb-6">
+              <button
+                onClick={() => setModalTab('resolve')}
+                className={`flex-1 pb-3 text-sm font-extrabold uppercase tracking-wider border-b-2 transition-all ${modalTab === 'resolve' ? 'border-brand-blue text-brand-blue' : 'border-transparent text-gray-400'}`}
+              >
+                Resolve Directly
               </button>
-              <button onClick={() => handleResolve(resolvingIncident)} disabled={resolving} className="flex-1 py-3.5 rounded-2xl font-bold text-white bg-gradient-to-r from-brand-blue to-blue-500 shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-                {resolving ? 'Resolving...' : 'Submit Resolution'}
+              <button
+                onClick={() => setModalTab('dispatch')}
+                className={`flex-1 pb-3 text-sm font-extrabold uppercase tracking-wider border-b-2 transition-all ${modalTab === 'dispatch' ? 'border-brand-blue text-brand-blue' : 'border-transparent text-gray-400'}`}
+              >
+                Dispatch Contractor
               </button>
             </div>
+
+            {modalTab === 'resolve' ? (
+              <div>
+                <h3 className="text-2xl font-extrabold text-gray-800 mb-2">Resolve Incident Directly</h3>
+                <p className="text-sm text-gray-500 mb-6 leading-relaxed">Upload an "After" photo to verify the resolution of this incident. The AI engine will audit the image verification.</p>
+                
+                <label className="border-2 border-dashed border-brand-blue/30 rounded-3xl p-8 mb-6 flex flex-col items-center justify-center bg-white/40 cursor-pointer hover:bg-white/65 hover:border-brand-blue transition-all group">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={e => setResolvePhoto(e.target.files?.[0] || null)}
+                  />
+                  <ImageIcon size={40} className="text-brand-blue mb-3 opacity-50 group-hover:opacity-100 group-hover:scale-105 transition-all" />
+                  <span className="text-sm font-bold text-gray-800">
+                    {resolvePhoto ? resolvePhoto.name : 'Click to upload photo'}
+                  </span>
+                  <span className="text-xs text-gray-500 mt-1 font-medium">
+                    {resolvePhoto ? `${(resolvePhoto.size / 1024).toFixed(0)} KB selected` : 'JPG or PNG (max 5MB)'}
+                  </span>
+                </label>
+                
+                <div className="flex space-x-4">
+                  <button onClick={() => setResolvingIncident(null)} disabled={resolving} className="flex-1 py-3 rounded-xl font-bold text-gray-500 bg-white hover:bg-gray-50 border border-gray-150 transition-colors shadow-sm disabled:opacity-50">
+                    Cancel
+                  </button>
+                  <button onClick={() => handleResolve(resolvingIncident.id)} disabled={resolving} className="flex-1 py-3 rounded-xl font-bold text-white bg-gradient-to-r from-brand-blue to-blue-500 shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                    {resolving ? 'Resolving...' : 'Submit Resolution'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-2xl font-extrabold text-gray-800">Dispatch Field Contractor</h3>
+                  <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">Establish a municipal work order and dispatch a contractor directly to the reported site.</p>
+                </div>
+
+                {/* Department Select */}
+                <div>
+                  <label className="text-xs font-black text-gray-400 uppercase tracking-widest block mb-1">Department</label>
+                  <select
+                    className="w-full bg-white/70 border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-semibold outline-none text-gray-700"
+                    value={selectedDept}
+                    onChange={e => setSelectedDept(e.target.value)}
+                  >
+                    {DEPARTMENTS.map(d => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Contractor Select */}
+                <div>
+                  <label className="text-xs font-black text-gray-400 uppercase tracking-widest block mb-1">Assigned Field Agent / Contractor</label>
+                  <select
+                    className="w-full bg-white/70 border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-semibold outline-none text-gray-700"
+                    value={selectedContractor}
+                    onChange={e => setSelectedContractor(e.target.value)}
+                  >
+                    {contractors.map(c => (
+                      <option key={c.id} value={c.id}>{c.name} ({c.email || 'No Email'})</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Dispatch Notes */}
+                <div>
+                  <label className="text-xs font-black text-gray-400 uppercase tracking-widest block mb-1">Dispatch Instructions</label>
+                  <textarea
+                    rows={3}
+                    placeholder="Enter dispatch notes, deadlines, or resolution directives..."
+                    className="w-full bg-white/70 border border-gray-200 rounded-xl px-4 py-2.5 text-sm font-medium outline-none text-gray-700 resize-none"
+                    value={dispatchNotes}
+                    onChange={e => setDispatchNotes(e.target.value)}
+                  />
+                </div>
+
+                <div className="flex space-x-4 pt-2">
+                  <button onClick={() => setResolvingIncident(null)} disabled={dispatching} className="flex-1 py-3 rounded-xl font-bold text-gray-500 bg-white hover:bg-gray-50 border border-gray-150 transition-colors shadow-sm disabled:opacity-50">
+                    Cancel
+                  </button>
+                  <button onClick={handleDispatchContractor} disabled={dispatching} className="flex-1 py-3 rounded-xl font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-500 shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                    {dispatching ? 'Dispatching...' : 'Confirm & Dispatch'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -64,8 +64,24 @@ async def shutdown():
 
 # ─── Helper: Call Nemotron ────────────────────────────────────
 
-async def call_nemotron(system_prompt: str, user_message: str, temperature: float = 0.3, max_tokens: int = 2048) -> str:
+async def log_ai_operation(task: str, success: bool, latency_ms: int, confidence: float = None, tokens_used: int = None, entity_type: str = None, entity_id: str = None, error_code: str = None, error_message: str = None):
+    """Log AI operation for monitoring and economics tracking"""
+    if not db_pool:
+        return
+    try:
+        estimated_cost = (tokens_used or 0) * 0.000003 if tokens_used else None
+        await db_pool.execute(
+            """INSERT INTO ai_operations_log (task, model, provider, entity_type, entity_id, success, latency_ms, confidence, tokens_used, estimated_cost, error_code, error_message)
+               VALUES ($1, $2, 'nvidia_nemotron', $3, $4, $5, $6, $7, $8, $9, $10, $11)""",
+            task, NVIDIA_MODEL, entity_type, entity_id, success, latency_ms, confidence, tokens_used, estimated_cost, error_code, error_message
+        )
+    except Exception as e:
+        print(f"Failed to log AI operation: {e}")
+
+async def call_nemotron(system_prompt: str, user_message: str, temperature: float = 0.3, max_tokens: int = 2048, task: str = "general", entity_type: str = None, entity_id: str = None) -> str:
     """Call NVIDIA Nemotron API via OpenAI-compatible endpoint"""
+    import time
+    start = time.time()
     try:
         response = await client.chat.completions.create(
             model=NVIDIA_MODEL,
@@ -76,8 +92,13 @@ async def call_nemotron(system_prompt: str, user_message: str, temperature: floa
             temperature=temperature,
             max_tokens=max_tokens,
         )
+        latency_ms = int((time.time() - start) * 1000)
+        tokens_used = getattr(response.usage, 'total_tokens', None) if response.usage else None
+        await log_ai_operation(task, True, latency_ms, None, tokens_used, entity_type, entity_id)
         return response.choices[0].message.content or ""
     except Exception as e:
+        latency_ms = int((time.time() - start) * 1000)
+        await log_ai_operation(task, False, latency_ms, None, None, entity_type, entity_id, type(e).__name__, str(e)[:200])
         print(f"Nemotron API error: {e}")
         raise HTTPException(status_code=503, detail=f"AI service unavailable: {str(e)}")
 
@@ -149,7 +170,7 @@ Always respond with valid JSON matching this schema:
 Category hint: {req.category_hint or 'auto-detect'}
 Report: {req.text}"""
 
-    raw = await call_nemotron(system, user, temperature=0.2, max_tokens=1024)
+    raw = await call_nemotron(system, user, temperature=0.2, max_tokens=1024, task="classification", entity_type="report")
     data = extract_json(raw)
 
     return NLUResponse(
@@ -217,7 +238,7 @@ Only cluster if semantically and geographically related. If uncertain, return nu
 Nearby incidents:
 {candidates}"""
 
-    raw = await call_nemotron(system, user, temperature=0.1, max_tokens=512)
+    raw = await call_nemotron(system, user, temperature=0.1, max_tokens=512, task="clustering", entity_type="report")
     data = extract_json(raw)
 
     # Validate that returned incident_id exists in our candidates
@@ -331,7 +352,7 @@ Citizen reports:
 {reports_text}
 Historical patterns: {req.historical_data or 'not available'}"""
 
-    raw = await call_nemotron(system, user, temperature=0.3)
+    raw = await call_nemotron(system, user, temperature=0.3, task="root_cause", entity_type="incident")
     data = extract_json(raw)
 
     return RootCauseResponse(
@@ -393,7 +414,7 @@ async def compute_priority(req: PriorityRequest):
     user = f"Category: {req.category}, Severity: {req.severity}, Score: {total:.1f}/100, Affected: {req.affected_population}"
 
     try:
-        recommendation = await call_nemotron(system, user, temperature=0.3, max_tokens=150)
+        recommendation = await call_nemotron(system, user, temperature=0.3, max_tokens=150, task="priority", entity_type="incident")
         recommendation = recommendation.strip().strip('"')
     except Exception:
         recommendation = f"High priority {req.category} issue affecting {req.affected_population} residents — immediate attention required."
@@ -452,7 +473,7 @@ Post-resolution citizen reports ({len(req.after_reports)} reports):
 
 Evidence images provided: {len(req.after_media_urls)}"""
 
-    raw = await call_nemotron(system, user, temperature=0.2)
+    raw = await call_nemotron(system, user, temperature=0.2, task="verification", entity_type="demand")
     data = extract_json(raw)
 
     return VerifyResolutionResponse(
@@ -503,7 +524,7 @@ Currently open incidents: {req.current_open_incidents}
 Monsoon season active: {req.monsoon_season}
 Days since last maintenance: {req.last_maintenance_days or 'unknown'}"""
 
-    raw = await call_nemotron(system, user, temperature=0.3)
+    raw = await call_nemotron(system, user, temperature=0.3, task="prediction", entity_type="incident")
     data = extract_json(raw)
 
     return RiskPredictionResponse(
@@ -617,7 +638,7 @@ Respond with JSON: {{"text": "...", "subject": "optional short subject/title", "
 
     user = f"Generate {req.purpose} communication based on: {json.dumps(req.data, ensure_ascii=False)}"
 
-    raw = await call_nemotron(system, user, temperature=0.5, max_tokens=1024)
+    raw = await call_nemotron(system, user, temperature=0.5, max_tokens=1024, task="summarization", entity_type="notification")
     data = extract_json(raw)
 
     return NLGResponse(

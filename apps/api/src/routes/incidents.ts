@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { requireAuth, optionalAuth, AuthRequest, requireRole } from '../middleware/auth';
 import { query } from '../db/pool';
 import { z } from 'zod';
+import { createNotification } from './notifications';
 
 const router = Router();
 
@@ -181,6 +182,25 @@ router.patch('/:id', requireAuth, requireRole('municipal_officer', 'sub_admin', 
       `UPDATE civic_incidents SET ${updates.join(', ')} WHERE id = $${p} RETURNING *`,
       [...params, req.params.id]
     );
+
+    if (status === 'resolved' || status === 'closed') {
+      try {
+        const reporters = await query(
+          `SELECT DISTINCT user_id FROM reports WHERE incident_id = $1`,
+          [req.params.id]
+        );
+        const incident = result.rows[0];
+        for (const row of reporters.rows) {
+          await createNotification(
+            row.user_id,
+            'incident_resolved',
+            'Issue Resolved!',
+            `"${incident.title}" has been marked as ${status}. Please verify if the issue is actually fixed.`,
+            { incident_id: req.params.id, status }
+          );
+        }
+      } catch {}
+    }
 
     res.json({ success: true, data: result.rows[0] });
   } catch (err) {

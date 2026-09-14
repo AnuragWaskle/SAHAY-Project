@@ -4,6 +4,8 @@ import { query, transaction } from '../db/pool';
 import { rateLimit } from 'express-rate-limit';
 import { z } from 'zod';
 import axios from 'axios';
+import { flagFraud } from './fraud';
+import { awardCredits } from './credits';
 
 const router = Router();
 
@@ -276,6 +278,61 @@ router.post('/', requireAuth, reportLimiter, async (req: AuthRequest, res: Respo
       );
     }
 
+    // Award civic credits via centralized system (enforces daily limits, cooldowns, trust multiplier)
+    let creditsEarned = 0;
+    try {
+      const hasEvidence = body.media_urls && body.media_urls.length > 0;
+      const creditAction = hasEvidence ? 'report_with_evidence' : 'report_submitted';
+      const result = await awardCredits(userId, creditAction, hasEvidence ? 'Report with evidence submitted' : 'Civic report submitted', 'report', report.id);
+      creditsEarned = result?.credits || 0;
+    } catch {}
+
+    // Fraud detection: check for rapid-fire duplicate submissions
+    try {
+      const recentRes = await query(
+        `SELECT COUNT(*) as cnt FROM reports WHERE user_id = $1 AND created_at > NOW() - INTERVAL '10 minutes'`,
+        [userId]
+      );
+      const recentCount = parseInt(recentRes.rows[0].cnt);
+      if (recentCount >= 5) {
+        await flagFraud(userId, 'rapid_submission', 'medium', `${recentCount} reports in 10 minutes`, { report_id: report.id, count: recentCount });
+      }
+    } catch {}
+
+    // Referral activation: if this is user's first report & they have a pending referral
+    try {
+      const reportCountRes = await query(
+        `SELECT COUNT(*) as cnt FROM reports WHERE user_id = $1`,
+        [userId]
+      );
+      if (parseInt(reportCountRes.rows[0].cnt) === 1) {
+        const pendingRef = await query(
+          `SELECT id, referrer_id FROM referrals WHERE referred_id = $1 AND status = 'pending'`,
+          [userId]
+        );
+        if ((pendingRef.rowCount ?? 0) > 0) {
+          const ref = pendingRef.rows[0];
+          const REFERRAL_REWARD = 25;
+          const REFERRED_BONUS = 10;
+          await transaction(async (q) => {
+            await q(`UPDATE referrals SET status = 'rewarded', reward_credits = $1, activated_at = NOW() WHERE id = $2`, [REFERRAL_REWARD, ref.id]);
+            await q(`UPDATE users SET civic_credits = civic_credits + $1 WHERE id = $2`, [REFERRAL_REWARD, ref.referrer_id]);
+            await q(
+              `INSERT INTO civic_credits_ledger (user_id, action, credits, balance_after, reason, source_type, source_id)
+               VALUES ($1, 'referral_bonus', $2, (SELECT civic_credits FROM users WHERE id = $1), 'Referral reward: referred user submitted first report', 'referral', $3)`,
+              [ref.referrer_id, REFERRAL_REWARD, ref.id]
+            );
+            await q(`UPDATE users SET civic_credits = civic_credits + $1 WHERE id = $2`, [REFERRED_BONUS, userId]);
+            await q(
+              `INSERT INTO civic_credits_ledger (user_id, action, credits, balance_after, reason, source_type, source_id)
+               VALUES ($1, 'referral_bonus', $2, (SELECT civic_credits FROM users WHERE id = $1), 'Welcome bonus: first civic report submitted', 'referral', $3)`,
+              [userId, REFERRED_BONUS, ref.id]
+            );
+          });
+        }
+      }
+    } catch {}
+
     res.status(201).json({
       success: true,
       data: report,
@@ -283,6 +340,7 @@ router.post('/', requireAuth, reportLimiter, async (req: AuthRequest, res: Respo
         clustered_into: clusteredIncidentId,
         ai_analysis: aiData,
         cluster_result: clusterResult,
+        credits_earned: creditsEarned,
       },
     });
   } catch (err) {

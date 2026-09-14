@@ -1,6 +1,8 @@
 import { Router, Response } from 'express';
 import { requireAuth, optionalAuth, AuthRequest } from '../middleware/auth';
 import { query, transaction } from '../db/pool';
+import { logger } from '../utils/logger';
+import { awardCredits } from './credits';
 
 const router = Router();
 
@@ -10,7 +12,7 @@ router.get('/', optionalAuth, async (req: AuthRequest, res: Response) => {
     const { city_id, ward_id, status } = req.query as Record<string, string>;
     const params: unknown[] = [];
     const conditions: string[] = [];
-    let p = 1;
+    let p = 2;
 
     if (city_id) {
       conditions.push(`m.city_id = $${p++}`);
@@ -185,7 +187,7 @@ router.post('/:id/progress', requireAuth, async (req: AuthRequest, res: Response
   try {
     const missionId = req.params.id;
     const userId = req.user!.id;
-    const { amount = 1 } = req.body;
+    const { amount = 1, evidence_url, description } = req.body;
 
     const result = await transaction(async (q) => {
       const missionCheck = await q('SELECT * FROM missions WHERE id = $1', [missionId]);
@@ -226,15 +228,22 @@ router.post('/:id/progress', requireAuth, async (req: AuthRequest, res: Response
         [JSON.stringify(currentCount + parseInt(amount)), missionId, userId]
       );
 
+      // Insert into mission progress reports (including evidence)
+      await q(
+        `INSERT INTO mission_progress_reports (mission_id, user_id, amount, evidence_url, description, status)
+         VALUES ($1, $2, $3, $4, $5, 'approved')`,
+        [missionId, userId, parseInt(amount), evidence_url || null, description || null]
+      );
+
       // Reward points
       await q(
-        `UPDATE users SET civic_impact_score = civic_impact_score + $1, 
-          level = CASE 
+        `UPDATE users SET civic_impact_score = civic_impact_score + $1,
+          level = CASE
             WHEN civic_impact_score + $1 >= 5000 THEN 5
             WHEN civic_impact_score + $1 >= 2000 THEN 4
             WHEN civic_impact_score + $1 >= 500 THEN 3
             WHEN civic_impact_score + $1 >= 100 THEN 2
-            ELSE 1 
+            ELSE 1
           END,
           updated_at = NOW()
          WHERE id = $2`,
@@ -244,16 +253,76 @@ router.post('/:id/progress', requireAuth, async (req: AuthRequest, res: Response
       return { newProgress, status };
     });
 
+    // Award credits via centralized system (daily limits, trust multiplier)
+    try {
+      await awardCredits(userId, 'mission_participate', 'Mission progress reported', 'mission', missionId as string);
+    } catch {}
+
     res.json({
       success: true,
       data: result,
-      message: result.status === 'completed' 
-        ? 'Congratulations! The civic mission has been successfully completed!' 
+      message: result.status === 'completed'
+        ? 'Congratulations! The civic mission has been successfully completed!'
         : 'Progress recorded! Keep up the good work.'
     });
   } catch (err: any) {
+    logger.error('Error in POST /missions/:id/progress:', err);
     const statusCode = ['Mission not found', 'Mission is not active', 'You must join the mission first before reporting progress'].includes(err.message) ? 400 : 500;
     res.status(statusCode).json({ success: false, error: err.message || 'Failed to update mission progress' });
+  }
+});
+
+// ─── GET /missions/:id/comments ──────────────────────────────
+router.get('/:id/comments', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await query(
+      `SELECT mc.id, mc.content, mc.created_at, u.name as user_name, u.avatar_url
+       FROM mission_comments mc
+       JOIN users u ON mc.user_id = u.id
+       WHERE mc.mission_id = $1
+       ORDER BY mc.created_at ASC`,
+      [req.params.id]
+    );
+    res.json({ success: true, data: result.rows });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to fetch comments' });
+  }
+});
+
+// ─── POST /missions/:id/comments ─────────────────────────────
+router.post('/:id/comments', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const { content } = req.body;
+    if (!content) {
+      res.status(400).json({ success: false, error: 'Content is required' });
+      return;
+    }
+    const result = await query(
+      `INSERT INTO mission_comments (mission_id, user_id, content)
+       VALUES ($1, $2, $3) RETURNING *`,
+      [req.params.id, req.user!.id, content]
+    );
+    res.json({ success: true, data: result.rows[0] });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to save comment' });
+  }
+});
+
+// ─── GET /missions/:id/progress-reports ──────────────────────
+router.get('/:id/progress-reports', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await query(
+      `SELECT mpr.id, mpr.amount, mpr.evidence_url, mpr.description, mpr.status, mpr.created_at,
+         u.name as user_name, u.avatar_url
+       FROM mission_progress_reports mpr
+       JOIN users u ON mpr.user_id = u.id
+       WHERE mpr.mission_id = $1
+       ORDER BY mpr.created_at DESC`,
+      [req.params.id]
+    );
+    res.json({ success: true, data: result.rows });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to fetch progress reports' });
   }
 });
 

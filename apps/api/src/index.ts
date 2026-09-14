@@ -27,6 +27,14 @@ import { leaderboardRouter } from './routes/leaderboard';
 import { predictionsRouter } from './routes/predictions';
 import { petitionsRouter } from './routes/petitions';
 import { uploadRouter } from './routes/upload';
+import { creditsRouter } from './routes/credits';
+import { rewardsRouter } from './routes/rewards';
+import { campaignsRouter } from './routes/campaigns';
+import { sponsorsRouter } from './routes/sponsors';
+import { fraudRouter } from './routes/fraud';
+import { aiTrackingRouter } from './routes/ai-tracking';
+import { revenueRouter } from './routes/revenue';
+import { referralsRouter } from './routes/referrals';
 
 import { initSocketIO } from './realtime/socket';
 import { logger } from './utils/logger';
@@ -98,6 +106,14 @@ app.use('/api/v1/leaderboard', leaderboardRouter);
 app.use('/api/v1/predictions', predictionsRouter);
 app.use('/api/v1/petitions', petitionsRouter);
 app.use('/api/v1/upload', uploadRouter);
+app.use('/api/v1/credits', creditsRouter);
+app.use('/api/v1/rewards', rewardsRouter);
+app.use('/api/v1/campaigns', campaignsRouter);
+app.use('/api/v1/sponsors', sponsorsRouter);
+app.use('/api/v1/fraud', fraudRouter);
+app.use('/api/v1/ai', aiTrackingRouter);
+app.use('/api/v1/revenue', revenueRouter);
+app.use('/api/v1/referrals', referralsRouter);
 
 // Health check
 app.get('/healthz', (_req, res) => {

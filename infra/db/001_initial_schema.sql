@@ -343,7 +343,8 @@ CREATE TABLE missions (
   ward_id           UUID REFERENCES wards(id),
   city_id           UUID NOT NULL REFERENCES cities(id),
   participant_count INTEGER NOT NULL DEFAULT 0,
-  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE mission_participants (
