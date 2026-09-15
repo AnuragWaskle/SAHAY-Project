@@ -312,4 +312,36 @@ router.patch('/:id', requireAuth, requireRole('municipal_officer', 'sub_admin', 
   }
 });
 
+// ─── POST /incidents/:id/vote (Upvote / Downvote) ────────────
+
+router.post('/:id/vote', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const { vote_type = 'up' } = req.body;
+    const isUp = vote_type === 'up';
+
+    const col = isUp ? 'upvotes_count' : 'downvotes_count';
+    const scoreDelta = isUp ? 5 : -3;
+
+    const result = await query(
+      `UPDATE civic_incidents
+       SET ${col} = COALESCE(${col}, 0) + 1,
+           priority_score = GREATEST(0, COALESCE(priority_score, 50) + $1),
+           updated_at = NOW()
+       WHERE id = $2
+       RETURNING id, title, priority_score, upvotes_count, downvotes_count, report_count`,
+      [scoreDelta, req.params.id]
+    );
+
+    if (result.rowCount === 0) {
+      res.status(404).json({ success: false, error: 'Incident not found' });
+      return;
+    }
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Failed to record vote' });
+  }
+});
+
 export { router as incidentsRouter };
+
