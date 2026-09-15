@@ -150,83 +150,83 @@ export default function App() {
     setIsLoggedIn(false);
   };
 
-  if (!isLoggedIn) {
-    return (
-      <SafeAreaProvider>
-        <LoginScreen onLogin={() => setIsLoggedIn(true)} />
-      </SafeAreaProvider>
-    );
-  }
-
   return (
     <AuthContext.Provider value={{ logout: handleLogout }}>
-    <SafeAreaProvider>
-      <NavigationContainer>
-        <Stack.Navigator screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="Main" component={MainTabs} />
-          <Stack.Screen
-            name="Notifications"
-            component={NotificationsScreen}
-            options={{ headerShown: true, title: 'Notifications', headerTintColor: '#FF7E67' }}
-          />
-          <Stack.Screen
-            name="MyReports"
-            component={MyReportsScreen}
-            options={{ headerShown: true, title: 'My Reports', headerTintColor: '#FF7E67' }}
-          />
-          <Stack.Screen
-            name="Verify"
-            component={VerifyScreen}
-            options={{ headerShown: true, title: 'Verify Resolutions', headerTintColor: '#FF7E67' }}
-          />
-          <Stack.Screen
-            name="IncidentDetail"
-            component={IncidentDetailScreen}
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="DemandDetail"
-            component={DemandDetailScreen}
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="InitiativeDetail"
-            component={InitiativeDetailScreen}
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="Settings"
-            component={SettingsScreen}
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="Feed"
-            component={FeedScreen}
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="ImpactWallet"
-            component={ImpactWalletScreen}
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="RewardMarketplace"
-            component={RewardMarketplaceScreen}
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="MissionDetail"
-            component={MissionDetailScreen}
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="Circles"
-            component={CirclesScreen}
-            options={{ headerShown: false }}
-          />
-        </Stack.Navigator>
-      </NavigationContainer>
-    </SafeAreaProvider>
+      <SafeAreaProvider>
+        <NavigationContainer>
+          {!isLoggedIn ? (
+            <Stack.Navigator screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="Login">
+                {() => <LoginScreen onLogin={() => setIsLoggedIn(true)} />}
+              </Stack.Screen>
+            </Stack.Navigator>
+          ) : (
+            <Stack.Navigator screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="Main" component={MainTabs} />
+              <Stack.Screen
+                name="Notifications"
+                component={NotificationsScreen}
+                options={{ headerShown: true, title: 'Notifications', headerTintColor: '#FF7E67' }}
+              />
+              <Stack.Screen
+                name="MyReports"
+                component={MyReportsScreen}
+                options={{ headerShown: true, title: 'My Reports', headerTintColor: '#FF7E67' }}
+              />
+              <Stack.Screen
+                name="Verify"
+                component={VerifyScreen}
+                options={{ headerShown: true, title: 'Verify Resolutions', headerTintColor: '#FF7E67' }}
+              />
+              <Stack.Screen
+                name="IncidentDetail"
+                component={IncidentDetailScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="DemandDetail"
+                component={DemandDetailScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="InitiativeDetail"
+                component={InitiativeDetailScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="Settings"
+                component={SettingsScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="Feed"
+                component={FeedScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="ImpactWallet"
+                component={ImpactWalletScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="RewardMarketplace"
+                component={RewardMarketplaceScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="MissionDetail"
+                component={MissionDetailScreen}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="Circles"
+                component={CirclesScreen}
+                options={{ headerShown: false }}
+              />
+            </Stack.Navigator>
+          )}
+        </NavigationContainer>
+      </SafeAreaProvider>
     </AuthContext.Provider>
   );
 }
