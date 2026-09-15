@@ -247,7 +247,7 @@ router.post('/:id/messages', requireAuth, async (req: AuthRequest, res: Response
     const msg = {
       ...result.rows[0],
       user_name: req.user!.name,
-      avatar_url: req.user!.avatar_url || null
+      avatar_url: (req.user as any).avatar_url || null
     };
 
     res.status(201).json({ success: true, data: msg });

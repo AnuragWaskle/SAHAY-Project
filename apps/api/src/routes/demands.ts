@@ -16,7 +16,8 @@ const STAGE_TRANSITIONS: Record<string, string[]> = {
   'work_planned': ['in_progress'],
   'in_progress': ['completed'],
   'completed': ['citizen_verification'],
-  'citizen_verification': ['resolved', 'reopened'],
+  'citizen_verification': ['resolved', 'reopened', 'conflicting_evidence'],
+  'conflicting_evidence': ['resolved', 'reopened', 'in_progress'],
   'resolved': ['reopened'],
   'reopened': ['submitted'],
 };
@@ -351,10 +352,10 @@ router.post('/:id/verify', requireAuth, async (req: AuthRequest, res: Response) 
       return;
     }
 
-    // Check demand is in citizen_verification stage
-    const demandRes = await query('SELECT stage FROM civic_demands WHERE id = $1', [req.params.id]);
-    if (demandRes.rows[0]?.stage !== 'citizen_verification') {
-      res.status(400).json({ success: false, error: 'Demand is not in citizen_verification stage' });
+    // Check demand is in citizen_verification or conflicting_evidence stage
+    const demandRes = await query('SELECT stage, assigned_officer_id, title FROM civic_demands WHERE id = $1', [req.params.id]);
+    if (!demandRes.rows[0] || !['citizen_verification', 'conflicting_evidence'].includes(demandRes.rows[0].stage)) {
+      res.status(400).json({ success: false, error: 'Demand is not currently in verification stage' });
       return;
     }
 
@@ -371,25 +372,55 @@ router.post('/:id/verify', requireAuth, async (req: AuthRequest, res: Response) 
       await awardCredits(req.user!.id, 'resolution_verify', 'Verified resolution outcome', 'demand', req.params.id as string);
     } catch {}
 
-    // Check if enough verifications to auto-resolve
+    // Check for conflicting evidence (Citizen disputes contractor resolution with fresh evidence)
+    const isDisputed = verdict === 'not_solved' && (evidence_urls.length > 0 || (comment && comment.length > 10));
+    if (isDisputed) {
+      await advanceStage(
+        req.params.id as string,
+        demandRes.rows[0].stage,
+        'conflicting_evidence',
+        req.user!.id,
+        `⚠️ CONFLICTING EVIDENCE: Citizen reported resolution failed with evidence. ${comment || ''}`,
+        evidence_urls
+      );
+
+      // Notify officer for manual review
+      if (demandRes.rows[0].assigned_officer_id) {
+        try {
+          await createNotification(
+            demandRes.rows[0].assigned_officer_id,
+            'manual_review_required',
+            '⚠️ Conflicting Evidence Alert',
+            `Citizen disputed resolution for "${demandRes.rows[0].title}". Manual review required.`,
+            { demand_id: req.params.id, stage: 'conflicting_evidence' }
+          );
+        } catch {}
+      }
+    }
+
+    // Evaluate verification consensus if 3 or more verifications exist
     const verRes = await query(
       'SELECT verdict FROM resolution_verifications WHERE demand_id = $1',
       [req.params.id]
     );
     const verts = verRes.rows;
-    if (verts.length >= 3) {
+    if (verts.length >= 3 && !isDisputed) {
       const solved = verts.filter((v: any) => v.verdict === 'solved').length;
       const pct = solved / verts.length;
       if (pct >= 0.6) {
         await advanceStage(req.params.id as string, 'citizen_verification', 'resolved', null,
-          `Auto-resolved: ${Math.round(pct * 100)}% of verifiers marked as solved`);
+          `Verified Resolved: ${Math.round(pct * 100)}% of citizen verifiers confirmed resolution`);
       } else if (pct <= 0.3) {
         await advanceStage(req.params.id as string, 'citizen_verification', 'reopened', null,
-          `Reopened: ${Math.round((1 - pct) * 100)}% of verifiers report problem not solved`);
+          `Reopened: ${Math.round((1 - pct) * 100)}% of verifiers report problem is still present`);
       }
     }
 
-    res.status(201).json({ success: true, message: 'Verification recorded' });
+    res.status(201).json({
+      success: true,
+      message: isDisputed ? 'Dispute recorded. Issue sent to Manual Review Queue.' : 'Verification recorded successfully',
+      is_conflicting: isDisputed,
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to submit verification' });
   }
@@ -416,6 +447,7 @@ async function advanceStage(
     in_progress: 'Work In Progress',
     completed: 'Marked Completed',
     citizen_verification: 'Awaiting Citizen Verification',
+    conflicting_evidence: 'Conflicting Evidence (Manual Review Required)',
     resolved: 'Resolved',
     reopened: 'Reopened',
   };

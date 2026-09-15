@@ -7,12 +7,13 @@ import {
 } from 'lucide-react';
 import apiClient from '../api/client';
 
-type Tab = 'command' | 'users' | 'incidents' | 'ngo' | 'settings' | 'ai' | 'rewards' | 'revenue';
+type Tab = 'command' | 'users' | 'incidents' | 'contractors' | 'ngo' | 'settings' | 'ai' | 'rewards' | 'revenue';
 
 const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   { key: 'command', label: 'Command Center', icon: <LayoutDashboard size={20} /> },
   { key: 'users', label: 'Users & Content', icon: <Users size={20} /> },
   { key: 'incidents', label: 'Incidents', icon: <AlertTriangle size={20} /> },
+  { key: 'contractors', label: 'Contractor Performance', icon: <ListChecks size={20} /> },
   { key: 'ngo', label: 'NGO / Initiatives', icon: <Building2 size={20} /> },
   { key: 'settings', label: 'Analytics & Settings', icon: <Settings size={20} /> },
   { key: 'ai', label: 'AI Intelligence', icon: <Cpu size={20} /> },
@@ -52,6 +53,7 @@ const AdminDashboard = () => {
         {activeTab === 'command' && <CommandCenter />}
         {activeTab === 'users' && <UserContentManagement />}
         {activeTab === 'incidents' && <IncidentManagement />}
+        {activeTab === 'contractors' && <ContractorPerformance />}
         {activeTab === 'ngo' && <NGOManagement />}
         {activeTab === 'settings' && <AnalyticsSettings />}
         {activeTab === 'ai' && <AIIntelligence />}
@@ -1227,6 +1229,83 @@ function EmptyState({ message }: { message: string }) {
   return (
     <div className="text-center py-10 bg-white/40 rounded-2xl border border-dashed border-gray-300">
       <p className="text-gray-500 font-medium">{message}</p>
+    </div>
+  );
+}
+
+function ContractorPerformance() {
+  const [data, setData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await apiClient.get('/admin/contractors/performance');
+      setData(res.data.data || []);
+    } catch (err) {
+      console.error('Contractor performance fetch failed', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  if (loading) return <><SectionHeader title="Contractor Performance" subtitle="Real resolution quality & SLA metrics" onRefresh={fetchData} /><LoadingState /></>;
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader title="Contractor Performance" subtitle="Real-world resolution verification, on-time rate, and citizen satisfaction" onRefresh={fetchData} />
+
+      <div className="glass p-6 rounded-3xl">
+        <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+          <ListChecks size={18} className="text-brand-blue" /> Field Contractors ({data.length})
+        </h3>
+        {data.length === 0 ? <EmptyState message="No contractor performance records recorded yet." /> : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-gray-500 font-bold border-b border-gray-200">
+                  <th className="pb-3 pr-4">Contractor</th>
+                  <th className="pb-3 pr-4">Total Jobs</th>
+                  <th className="pb-3 pr-4">Completed</th>
+                  <th className="pb-3 pr-4">On-Time %</th>
+                  <th className="pb-3 pr-4">Verified %</th>
+                  <th className="pb-3 pr-4">Citizen Rejection %</th>
+                  <th className="pb-3 pr-4">Avg Resolution Time</th>
+                  <th className="pb-3">Rating</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.map((c: any) => (
+                  <tr key={c.contractor_id} className="border-b border-gray-100 hover:bg-white/50">
+                    <td className="py-3 pr-4">
+                      <span className="font-bold text-gray-800 block">{c.contractor_name}</span>
+                      <span className="text-xs text-gray-400">{c.email || c.phone || 'Field Contractor'}</span>
+                    </td>
+                    <td className="py-3 pr-4 font-bold text-gray-700">{c.total_jobs}</td>
+                    <td className="py-3 pr-4 font-semibold text-gray-700">{c.completed_jobs}</td>
+                    <td className="py-3 pr-4 font-bold text-brand-blue">{c.on_time_pct}%</td>
+                    <td className="py-3 pr-4 font-bold text-brand-green">{c.verified_resolution_pct}%</td>
+                    <td className="py-3 pr-4 font-bold text-red-500">{c.citizen_rejection_pct}%</td>
+                    <td className="py-3 pr-4 text-gray-600 font-medium">{c.avg_resolution_hours} hrs</td>
+                    <td className="py-3">
+                      <span className={`text-xs font-black px-2.5 py-1 rounded-full uppercase ${
+                        c.performance_rating === 'EXCELLENT' ? 'bg-green-100 text-green-700' :
+                        c.performance_rating === 'GOOD' ? 'bg-blue-100 text-blue-700' :
+                        c.performance_rating === 'NEEDS_IMPROVEMENT' ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-red-100 text-red-700'
+                      }`}>
+                        {c.performance_rating?.replace(/_/g, ' ')}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

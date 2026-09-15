@@ -248,10 +248,70 @@ router.patch('/users/:id', requireRole('super_admin'), async (req: AuthRequest, 
       return;
     }
 
-    await logAudit(req.user!.id, `user_${action}`, 'user', req.params.id as string, { role });
-    res.json({ success: true, message: `User ${action} successful` });
+    await logAudit(req.user!.id, 'user_updated', 'user', req.params.id as string, { action, role });
+    res.json({ success: true, message: `User action ${action} completed` });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to update user' });
+  }
+});
+
+// ─── GET /admin/contractors/performance ─────────────────────
+
+router.get('/contractors/performance', requireRole('sub_admin', 'super_admin', 'municipal_officer'), async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await query(
+      `SELECT u.id as contractor_id, u.name as contractor_name, u.email, u.phone,
+        COUNT(wo.id) as total_jobs,
+        COUNT(wo.id) FILTER (WHERE wo.status = 'completed') as completed_jobs,
+        COUNT(wo.id) FILTER (WHERE wo.status = 'in_progress') as in_progress_jobs,
+        COUNT(wo.id) FILTER (WHERE wo.completed_at <= wo.created_at + INTERVAL '48 hours') as on_time_jobs,
+        COUNT(rv.id) FILTER (WHERE rv.verdict = 'solved') as verified_solved,
+        COUNT(rv.id) FILTER (WHERE rv.verdict = 'not_solved') as citizen_rejected,
+        AVG(EXTRACT(EPOCH FROM (wo.completed_at - wo.created_at))/3600) as avg_resolution_hours
+       FROM users u
+       JOIN work_orders wo ON wo.contractor_id = u.id
+       LEFT JOIN resolution_verifications rv ON rv.demand_id = wo.demand_id
+       GROUP BY u.id, u.name, u.email, u.phone
+       ORDER BY total_jobs DESC`
+    );
+
+    const data = result.rows.map((r: any) => {
+      const total = parseInt(r.total_jobs || '0');
+      const completed = parseInt(r.completed_jobs || '0');
+      const onTime = parseInt(r.on_time_jobs || '0');
+      const verified = parseInt(r.verified_solved || '0');
+      const rejected = parseInt(r.citizen_rejected || '0');
+
+      const onTimePct = completed > 0 ? Math.round((onTime / completed) * 100) : 100;
+      const verifiedPct = completed > 0 ? Math.round((verified / (verified + rejected || 1)) * 100) : 100;
+      const rejectionPct = completed > 0 ? Math.round((rejected / (verified + rejected || 1)) * 100) : 0;
+      const avgHours = r.avg_resolution_hours ? Math.round(parseFloat(r.avg_resolution_hours)) : 24;
+
+      let rating = 'EXCELLENT';
+      if (rejectionPct > 20 || onTimePct < 60) rating = 'CRITICAL_REVIEW';
+      else if (rejectionPct > 10 || onTimePct < 80) rating = 'NEEDS_IMPROVEMENT';
+      else if (onTimePct >= 90 && verifiedPct >= 85) rating = 'EXCELLENT';
+      else rating = 'GOOD';
+
+      return {
+        contractor_id: r.contractor_id,
+        contractor_name: r.contractor_name,
+        email: r.email,
+        phone: r.phone,
+        total_jobs: total,
+        completed_jobs: completed,
+        in_progress_jobs: parseInt(r.in_progress_jobs || '0'),
+        on_time_pct: onTimePct,
+        verified_resolution_pct: verifiedPct,
+        citizen_rejection_pct: rejectionPct,
+        avg_resolution_hours: avgHours,
+        performance_rating: rating,
+      };
+    });
+
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Failed to fetch contractor performance' });
   }
 });
 

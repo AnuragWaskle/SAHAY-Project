@@ -8,10 +8,9 @@ import {
   ScrollView,
   Platform,
   Linking,
-  Dimensions,
 } from 'react-native';
 import MapView, { Marker } from 'react-native-maps';
-import { Search, MapPin, AlertTriangle, Compass, Navigation, X } from 'lucide-react-native';
+import { Search, MapPin, AlertTriangle, Compass, Navigation, X, List, Map as MapIcon, ChevronRight } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import apiClient from '../api/client';
 
@@ -25,6 +24,7 @@ interface Incident {
   priority_score: number;
   report_count: number;
   description?: string;
+  ward_name?: string;
 }
 
 interface Mission {
@@ -55,6 +55,9 @@ export default function ExploreScreen() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  
+  // Default to list view on Web / desktop or allow toggling
+  const [viewMode, setViewMode] = useState<'map' | 'list'>(Platform.OS === 'web' ? 'list' : 'map');
 
   // Drawer selection
   const [selectedItem, setSelectedItem] = useState<any>(null);
@@ -118,8 +121,18 @@ export default function ExploreScreen() {
     });
   }, [missions, searchQuery, selectedCategory]);
 
+  const getSeverityBadge = (severity: string) => {
+    switch ((severity || '').toLowerCase()) {
+      case 'critical': return { bg: 'bg-red-500', text: 'text-white', label: 'Critical' };
+      case 'high': return { bg: 'bg-orange-500', text: 'text-white', label: 'High' };
+      case 'medium': return { bg: 'bg-amber-500', text: 'text-white', label: 'Medium' };
+      case 'low': return { bg: 'bg-emerald-500', text: 'text-white', label: 'Low' };
+      default: return { bg: 'bg-gray-500', text: 'text-white', label: severity || 'Active' };
+    }
+  };
+
   const getSeverityColor = (severity: string) => {
-    switch (severity.toLowerCase()) {
+    switch ((severity || '').toLowerCase()) {
       case 'critical': return '#DC2626';
       case 'high': return '#EA580C';
       case 'medium': return '#F59E0B';
@@ -146,48 +159,13 @@ export default function ExploreScreen() {
   };
 
   return (
-    <View className="flex-1 bg-white">
-      <MapView
-        className="flex-1"
-        initialRegion={BHOPAL_REGION}
-        showsUserLocation
-        showsMyLocationButton
-        onPress={() => {
-          setSelectedItem(null);
-          setSelectedType(null);
-        }}
-      >
-        {filteredIncidents.map((incident, index) => (
-          <Marker
-            key={`incident-${index}`}
-            coordinate={{ latitude: incident.lat, longitude: incident.lng }}
-            pinColor={getSeverityColor(incident.severity)}
-            onPress={() => {
-              setSelectedItem(incident);
-              setSelectedType('incident');
-            }}
-          />
-        ))}
-
-        {filteredMissions.map((mission, index) => (
-          <Marker
-            key={`mission-${index}`}
-            coordinate={{ latitude: mission.latitude!, longitude: mission.longitude! }}
-            pinColor="#10B981"
-            onPress={() => {
-              setSelectedItem(mission);
-              setSelectedType('mission');
-            }}
-          />
-        ))}
-      </MapView>
-
-      {/* Header filter tags search */}
-      <View className="absolute top-16 left-4 right-4">
-        <View className="flex-row items-center bg-white rounded-2xl px-4 py-3.5 shadow-lg border border-gray-100">
+    <View className="flex-1 bg-[#F5F7FA]">
+      {/* Header Search & Filter Bar */}
+      <View className="pt-12 px-4 pb-3 bg-white border-b border-gray-100 shadow-sm z-20">
+        <View className="flex-row items-center bg-gray-50 rounded-2xl px-4 py-3 border border-gray-150">
           <Search size={18} color="#6B7280" />
           <TextInput
-            className="flex-1 ml-3 text-sm font-semibold text-gray-700 outline-none"
+            className="flex-1 ml-3 text-sm font-semibold text-gray-800"
             placeholder="Search incidents or locations..."
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
@@ -198,27 +176,46 @@ export default function ExploreScreen() {
               <Text className="text-brand-orange text-xs font-black uppercase">Clear</Text>
             </TouchableOpacity>
           )}
+
+          {/* Toggle Map / List Mode Button */}
+          <TouchableOpacity
+            onPress={() => setViewMode(prev => prev === 'map' ? 'list' : 'map')}
+            className="ml-2 px-3 py-1.5 bg-brand-orange/10 rounded-xl flex-row items-center"
+          >
+            {viewMode === 'map' ? (
+              <>
+                <List size={14} color="#FF7E67" />
+                <Text className="ml-1 text-[11px] font-extrabold text-brand-orange uppercase">List</Text>
+              </>
+            ) : (
+              <>
+                <MapIcon size={14} color="#FF7E67" />
+                <Text className="ml-1 text-[11px] font-extrabold text-brand-orange uppercase">Map</Text>
+              </>
+            )}
+          </TouchableOpacity>
         </View>
 
+        {/* Category Pills */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
-          className="mt-3.5"
+          className="mt-3"
           contentContainerStyle={{ paddingRight: 16 }}
         >
           {CATEGORIES.map((category) => (
             <TouchableOpacity
               key={category}
               onPress={() => setSelectedCategory(category)}
-              className={`mr-2 px-4.5 py-2.5 rounded-full border border-transparent ${
+              className={`mr-2 px-4 py-2 rounded-full border border-transparent ${
                 selectedCategory === category
                   ? 'bg-brand-orange shadow-md'
-                  : 'bg-white border-gray-100 shadow-sm'
+                  : 'bg-white border-gray-200 shadow-sm'
               }`}
             >
               <Text
                 className={`text-xs font-black uppercase tracking-wider ${
-                  selectedCategory === category ? 'text-white' : 'text-gray-650'
+                  selectedCategory === category ? 'text-white' : 'text-gray-700'
                 }`}
               >
                 {category}
@@ -228,16 +225,133 @@ export default function ExploreScreen() {
         </ScrollView>
       </View>
 
+      {/* Main Content Area: Map View OR List View */}
+      {viewMode === 'map' && Platform.OS !== 'web' ? (
+        <MapView
+          className="flex-1"
+          initialRegion={BHOPAL_REGION}
+          showsUserLocation
+          showsMyLocationButton
+          onPress={() => {
+            setSelectedItem(null);
+            setSelectedType(null);
+          }}
+        >
+          {filteredIncidents.map((incident, index) => (
+            <Marker
+              key={`incident-${index}`}
+              coordinate={{ latitude: incident.lat, longitude: incident.lng }}
+              pinColor={getSeverityColor(incident.severity)}
+              onPress={() => {
+                setSelectedItem(incident);
+                setSelectedType('incident');
+              }}
+            />
+          ))}
+
+          {filteredMissions.map((mission, index) => (
+            <Marker
+              key={`mission-${index}`}
+              coordinate={{ latitude: mission.latitude!, longitude: mission.longitude! }}
+              pinColor="#10B981"
+              onPress={() => {
+                setSelectedItem(mission);
+                setSelectedType('mission');
+              }}
+            />
+          ))}
+        </MapView>
+      ) : (
+        /* List View (Render cards list) */
+        <ScrollView className="flex-1 px-4 pt-4 pb-28">
+          <View className="flex-row items-center justify-between mb-3 px-1">
+            <Text className="text-xs font-black uppercase tracking-wider text-gray-500">
+              {filteredIncidents.length + filteredMissions.length} Active Issues & Missions
+            </Text>
+            <TouchableOpacity onPress={() => setViewMode('map')} className="flex-row items-center">
+              <MapPin size={12} color="#FF7E67" />
+              <Text className="text-[11px] font-extrabold text-brand-orange ml-1 uppercase">Switch to Map</Text>
+            </TouchableOpacity>
+          </View>
+
+          {filteredIncidents.length === 0 && filteredMissions.length === 0 ? (
+            <View className="bg-white p-8 rounded-3xl items-center justify-center my-6 border border-gray-100">
+              <AlertTriangle size={36} color="#F59E0B" />
+              <Text className="text-gray-800 font-black text-base mt-3">No Issues Found</Text>
+              <Text className="text-gray-400 text-xs text-center font-medium mt-1">
+                No active incidents match your selected filters. Try clearing search or choosing "All".
+              </Text>
+            </View>
+          ) : (
+            filteredIncidents.map((incident) => {
+              const badge = getSeverityBadge(incident.severity);
+              return (
+                <TouchableOpacity
+                  key={incident.id}
+                  onPress={() => navigation.navigate('IncidentDetail', { incidentId: incident.id })}
+                  className="bg-white rounded-3xl p-5 mb-3.5 shadow-sm border border-gray-100"
+                >
+                  <View className="flex-row justify-between items-start mb-2">
+                    <View className="flex-row items-center flex-1 mr-2">
+                      <View className={`${badge.bg} px-2.5 py-1 rounded-full mr-2`}>
+                        <Text className={`text-[10px] font-black uppercase ${badge.text}`}>
+                          {badge.label}
+                        </Text>
+                      </View>
+                      <Text className="text-gray-400 text-[10px] font-bold uppercase tracking-wider capitalize">
+                        {incident.category}
+                      </Text>
+                    </View>
+                    {incident.ward_name && (
+                      <View className="flex-row items-center bg-gray-50 px-2.5 py-1 rounded-full border border-gray-100">
+                        <MapPin size={10} color="#6B7280" />
+                        <Text className="text-gray-500 font-extrabold text-[10px] ml-1">{incident.ward_name}</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <Text className="text-base font-extrabold text-gray-900 leading-snug mb-1">
+                    {incident.title}
+                  </Text>
+
+                  {incident.description && (
+                    <Text className="text-xs text-gray-500 font-medium leading-relaxed mb-3" numberOfLines={2}>
+                      {incident.description}
+                    </Text>
+                  )}
+
+                  <View className="flex-row items-center justify-between pt-3 border-t border-gray-50">
+                    <View className="flex-row items-center space-x-3">
+                      <Text className="text-xs font-extrabold text-brand-orange">
+                        🔥 Score: {Math.round(incident.priority_score || 50)}
+                      </Text>
+                      <Text className="text-xs font-bold text-gray-400">
+                        👥 {incident.report_count || 1} Reports
+                      </Text>
+                    </View>
+
+                    <View className="flex-row items-center text-brand-orange font-black text-xs">
+                      <Text className="text-brand-orange font-black text-xs uppercase mr-1">View</Text>
+                      <ChevronRight size={14} color="#FF7E67" />
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          )}
+        </ScrollView>
+      )}
+
       {loading && (
-        <View className="absolute inset-0 items-center justify-center bg-white/70">
+        <View className="absolute inset-0 items-center justify-center bg-white/70 z-30">
           <ActivityIndicator size="large" color="#FF7E67" />
-          <Text className="mt-3 text-gray-600 font-medium">Loading map pins...</Text>
+          <Text className="mt-3 text-gray-600 font-medium">Loading civic issues...</Text>
         </View>
       )}
 
-      {/* Bottom Panel */}
-      <View className="absolute bottom-28 left-4 right-4">
-        {selectedItem ? (
+      {/* Bottom Panel Drawer for Selected Item (when in Map mode) */}
+      {viewMode === 'map' && selectedItem && (
+        <View className="absolute bottom-28 left-4 right-4 z-20">
           <View
             className="bg-white rounded-[26px] p-5 shadow-2xl border border-gray-100"
             style={{ elevation: 12 }}
@@ -301,8 +415,12 @@ export default function ExploreScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        ) : (
-          /* Default Status bar */
+        </View>
+      )}
+
+      {/* Bottom Status & Toggle Bar */}
+      <View className="absolute bottom-28 left-4 right-4 z-10">
+        {!selectedItem && (
           <View className="bg-white rounded-2xl px-4 py-3 shadow-lg flex-row items-center justify-between border border-gray-100">
             <View className="flex-row items-center">
               <MapPin size={15} color="#FF7E67" />
@@ -310,10 +428,15 @@ export default function ExploreScreen() {
                 {filteredIncidents.length + filteredMissions.length} Pins Found
               </Text>
             </View>
-            <View className="flex-row items-center">
+            <TouchableOpacity
+              onPress={() => setViewMode(prev => prev === 'map' ? 'list' : 'map')}
+              className="flex-row items-center bg-brand-orange/10 px-3 py-1.5 rounded-xl border border-brand-orange/20"
+            >
               <AlertTriangle size={13} color="#EA580C" />
-              <Text className="ml-1 text-[10px] font-black text-gray-400 uppercase tracking-wider">Bhopal Ward Map</Text>
-            </View>
+              <Text className="ml-1.5 text-[10px] font-black text-brand-orange uppercase tracking-wider">
+                {viewMode === 'map' ? 'Switch to List View' : 'Switch to Map View'}
+              </Text>
+            </TouchableOpacity>
           </View>
         )}
       </View>

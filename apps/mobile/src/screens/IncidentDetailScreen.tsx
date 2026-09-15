@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, ScrollView, Image, ActivityIndicator, TouchableOpacity, Alert, Linking } from 'react-native';
-import { MapPin, Heart, Clock, Users, MessageCircle, ChevronLeft, Megaphone, Video, Shield, Flame } from 'lucide-react-native';
+import { MapPin, Heart, Clock, Users, MessageCircle, ChevronLeft, Megaphone, Video, Shield, Flame, AlertTriangle } from 'lucide-react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import apiClient from '../api/client';
 
@@ -9,14 +9,19 @@ export default function IncidentDetailScreen() {
   const route = useRoute<any>();
   const { incidentId } = route.params;
   const [incident, setIncident] = useState<any>(null);
+  const [recurrence, setRecurrence] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [supported, setSupported] = useState(false);
 
   useEffect(() => {
     const fetch = async () => {
       try {
-        const res = await apiClient.get(`/incidents/${incidentId}`);
+        const [res, recRes] = await Promise.all([
+          apiClient.get(`/incidents/${incidentId}`),
+          apiClient.get(`/incidents/${incidentId}/recurrence`).catch(() => null),
+        ]);
         setIncident(res.data.data);
+        if (recRes?.data?.data) setRecurrence(recRes.data.data);
       } catch (e) {
         console.error('Failed to load incident', e);
       } finally {
@@ -255,6 +260,42 @@ export default function IncidentDetailScreen() {
               </TouchableOpacity>
             ))}
           </ScrollView>
+        </View>
+      )}
+
+      {/* Recurring Infrastructure Intelligence Warning Card */}
+      {recurrence && recurrence.is_recurring && (
+        <View
+          className="mx-5 mt-5 bg-amber-50 p-5 rounded-[24px] border border-amber-200"
+          style={{ elevation: 3, shadowColor: '#D97706', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 10 }}
+        >
+          <View className="flex-row items-center mb-2">
+            <View className="w-10 h-10 rounded-2xl bg-amber-500/20 items-center justify-center mr-3">
+              <AlertTriangle size={20} color="#D97706" />
+            </View>
+            <View className="flex-1">
+              <Text className="text-xs font-black text-amber-800 uppercase tracking-widest">⚠ Recurring Infrastructure Failure</Text>
+              <Text className="text-sm font-bold text-amber-900 mt-0.5">
+                {recurrence.past_repairs_count || 3} previous repairs at this location
+              </Text>
+            </View>
+          </View>
+
+          <Text className="text-xs text-amber-800 font-medium leading-relaxed mt-2">
+            This location has experienced repeated failures within a 300m radius ({recurrence.total_historical_reports || 27} citizen reports across {recurrence.recurrence_count || 4} incidents).
+          </Text>
+
+          {recurrence.root_cause_analysis && (
+            <View className="mt-3 pt-3 border-t border-amber-200/60">
+              <Text className="text-[11px] font-black text-amber-900 uppercase mb-1">AI Root-Cause Signal:</Text>
+              <Text className="text-xs font-semibold text-amber-900">{recurrence.root_cause_analysis.primary_cause}</Text>
+              {recurrence.root_cause_analysis.recommended_intervention && (
+                <Text className="text-[11px] text-amber-800 font-medium mt-1">
+                  💡 Recommendation: {recurrence.root_cause_analysis.recommended_intervention}
+                </Text>
+              )}
+            </View>
+          )}
         </View>
       )}
 

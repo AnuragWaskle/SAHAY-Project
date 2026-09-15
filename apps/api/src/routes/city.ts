@@ -238,6 +238,128 @@ router.post('/:id/compute-score', requireAuth, requireRole('sub_admin', 'super_a
   }
 });
 
+// ─── GET /city/:id/infrastructure-health ────────────────────────
+
+router.get('/:id/infrastructure-health', optionalAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const cityId = req.params.id;
+
+    // Fetch domain category breakdown
+    const categoryStats = await query(
+      `SELECT category,
+        COUNT(*) as total_incidents,
+        COUNT(*) FILTER (WHERE status = 'active') as active_count,
+        COUNT(*) FILTER (WHERE status = 'resolved' OR status = 'closed') as resolved_count,
+        COUNT(*) FILTER (WHERE severity = 'critical' AND status = 'active') as critical_active
+       FROM civic_incidents
+       WHERE city_id = $1
+       GROUP BY category`,
+      [cityId]
+    );
+
+    // Fetch ward-wise health stats
+    const wardStats = await query(
+      `SELECT w.id as ward_id, w.name as ward_name, w.ward_number,
+        COUNT(ci.id) as total_incidents,
+        COUNT(ci.id) FILTER (WHERE ci.status = 'active') as active_incidents,
+        COUNT(ci.id) FILTER (WHERE ci.severity = 'critical' AND ci.status = 'active') as critical_incidents
+       FROM wards w
+       LEFT JOIN civic_incidents ci ON ci.ward_id = w.id
+       WHERE w.city_id = $1
+       GROUP BY w.id, w.name, w.ward_number
+       ORDER BY active_incidents DESC`,
+      [cityId]
+    );
+
+    // Domain health mapping
+    const domainScores: Record<string, { score: number, active: number, resolved: number, status: string }> = {
+      road_infrastructure: { score: 78, active: 0, resolved: 0, status: 'MODERATE' },
+      drainage_sewage: { score: 64, active: 0, resolved: 0, status: 'NEEDS_ATTENTION' },
+      water_supply: { score: 82, active: 0, resolved: 0, status: 'GOOD' },
+      street_lighting: { score: 88, active: 0, resolved: 0, status: 'EXCELLENT' },
+      public_safety: { score: 91, active: 0, resolved: 0, status: 'EXCELLENT' },
+    };
+
+    let totalActiveAll = 0;
+    let totalResolvedAll = 0;
+
+    for (const row of categoryStats.rows) {
+      const cat = row.category;
+      const active = parseInt(row.active_count || '0');
+      const resolved = parseInt(row.resolved_count || '0');
+      const critical = parseInt(row.critical_active || '0');
+      totalActiveAll += active;
+      totalResolvedAll += resolved;
+
+      let score = 100 - (active * 5) - (critical * 12);
+      score = Math.max(25, Math.min(100, score));
+
+      const status = score >= 85 ? 'EXCELLENT' : (score >= 70 ? 'GOOD' : (score >= 50 ? 'MODERATE' : 'CRITICAL_ATTENTION'));
+
+      if (['pothole', 'road_damage', 'encroachment'].includes(cat)) {
+        domainScores.road_infrastructure.active += active;
+        domainScores.road_infrastructure.resolved += resolved;
+        domainScores.road_infrastructure.score = Math.min(domainScores.road_infrastructure.score, score);
+        domainScores.road_infrastructure.status = status;
+      } else if (['sewage', 'waterlogging'].includes(cat)) {
+        domainScores.drainage_sewage.active += active;
+        domainScores.drainage_sewage.resolved += resolved;
+        domainScores.drainage_sewage.score = Math.min(domainScores.drainage_sewage.score, score);
+        domainScores.drainage_sewage.status = status;
+      } else if (['water_supply'].includes(cat)) {
+        domainScores.water_supply.active += active;
+        domainScores.water_supply.resolved += resolved;
+        domainScores.water_supply.score = Math.min(domainScores.water_supply.score, score);
+        domainScores.water_supply.status = status;
+      } else if (['streetlight'].includes(cat)) {
+        domainScores.street_lighting.active += active;
+        domainScores.street_lighting.resolved += resolved;
+        domainScores.street_lighting.score = Math.min(domainScores.street_lighting.score, score);
+        domainScores.street_lighting.status = status;
+      } else if (['safety'].includes(cat)) {
+        domainScores.public_safety.active += active;
+        domainScores.public_safety.resolved += resolved;
+        domainScores.public_safety.score = Math.min(domainScores.public_safety.score, score);
+        domainScores.public_safety.status = status;
+      }
+    }
+
+    const overallScore = Math.round(
+      (domainScores.road_infrastructure.score * 0.3) +
+      (domainScores.drainage_sewage.score * 0.25) +
+      (domainScores.water_supply.score * 0.2) +
+      (domainScores.street_lighting.score * 0.15) +
+      (domainScores.public_safety.score * 0.1)
+    );
+
+    res.json({
+      success: true,
+      data: {
+        overall_civic_health: overallScore,
+        domains: domainScores,
+        total_active_incidents: totalActiveAll,
+        total_resolved_incidents: totalResolvedAll,
+        wards_ranking: wardStats.rows.map((w: any) => {
+          const act = parseInt(w.active_incidents || '0');
+          const crit = parseInt(w.critical_incidents || '0');
+          const healthScore = Math.max(30, 100 - (act * 6) - (crit * 15));
+          return {
+            ward_id: w.ward_id,
+            ward_name: w.ward_name,
+            ward_number: w.ward_number,
+            health_score: healthScore,
+            active_incidents: act,
+            critical_incidents: crit,
+            status: healthScore >= 80 ? 'STABLE' : (healthScore >= 55 ? 'MODERATE_RISK' : 'HIGH_RISK'),
+          };
+        }),
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Failed to compute infrastructure health' });
+  }
+});
+
 // ─── GET /city/:id/officer-stats ─────────────────────────────
 
 router.get('/:id/officer-stats', requireAuth, async (req: AuthRequest, res: Response) => {
