@@ -70,18 +70,9 @@ export default function OtpScreen({ route, navigation }: any) {
             civicCoins: 450,
           };
         } else {
-          userProfile = {
-            id: `user-${phone}`,
-            name: `User (${phone.slice(-4)})`,
-            email: `${phone}@sahay.org`,
-            phone: phone,
-            role: 'citizen',
-            ward: 'Ward 12, Bhopal',
-            city: 'Bhopal',
-            xp: 350,
-            level: 2,
-            civicCoins: 100,
-          };
+          setError('Account not found. Please sign up first.');
+          setLoading(false);
+          return;
         }
       }
 

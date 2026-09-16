@@ -30,6 +30,26 @@
         "projectId": "e401c54b-33b0-4076-8126-bb642db7e2d5"
       }
     },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Sahay to use your location to accurately map civic issues."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Sahay to access your camera to capture photos of civic issues."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Sahay to access your photos to attach existing images to your reports."
+        }
+      ]
+    ],
     "owner": "anuragwaskle"
   }
 }

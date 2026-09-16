@@ -161,16 +161,9 @@ function AppNavigator() {
 }
 
 export default function App() {
-  const [role, setRoleState] = useState<'citizen' | 'ngo' | 'super_admin'>('ngo');
-  const [user, setUser] = useState<UserProfile | null>({
-    id: 'user-ngo-1',
-    name: 'Seva Foundation NGO',
-    email: 'contact@sevafoundation.org',
-    role: 'ngo',
-    ward: 'Ward 12',
-    city: 'Bhopal'
-  });
-  const [token, setToken] = useState<string | null>('demo_token_ngo');
+  const [role, setRoleState] = useState<'citizen' | 'ngo' | 'super_admin'>('citizen');
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [token, setToken] = useState<string | null>(null);
 
   React.useEffect(() => {
     setAuthToken(token || 'demo_token_ngo');
