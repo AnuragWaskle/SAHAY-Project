@@ -8,15 +8,18 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
-  ActivityIndicator,
+  ActivityIndicator
 } from 'react-native';
-import { ArrowRight, UserCheck, Shield, Building2, User } from 'lucide-react-native';
-import apiClient from '../api/client';
+import { ArrowRight, UserCheck, Shield, Building2, User, Lock, Eye, EyeOff } from 'lucide-react-native';
+import { useAuth, UserProfile } from '../context/AuthContext';
 
 export default function SignupScreen({ navigation }: any) {
+  const { login } = useAuth();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [ward, setWard] = useState('Ward 12, Bhopal');
   const [role, setRole] = useState<'citizen' | 'ngo'>('citizen');
   const [error, setError] = useState('');
@@ -24,7 +27,8 @@ export default function SignupScreen({ navigation }: any) {
 
   const handleRegister = async () => {
     setError('');
-    if (!name.trim()) {
+    const cleanName = name.trim();
+    if (!cleanName) {
       setError('Please enter your full name');
       return;
     }
@@ -33,26 +37,36 @@ export default function SignupScreen({ navigation }: any) {
       setError('Please enter a valid 10-digit mobile number');
       return;
     }
+    const cleanPass = password.trim();
+    if (!cleanPass) {
+      setError('Please set a password for your account');
+      return;
+    }
+    if (cleanPass.length < 4) {
+      setError('Password must be at least 4 characters');
+      return;
+    }
 
     setLoading(true);
-    try {
-      // Send real OTP before navigating
-      await apiClient.post('/auth/send-otp', { phone: cleanPhone });
 
-      navigation.navigate('Otp', {
+    try {
+      const userProfile: UserProfile = {
+        id: `user-${Date.now()}`,
+        name: cleanName,
+        email: email.trim() || `${cleanName.toLowerCase().replace(/\s+/g, '')}@sahay.org`,
         phone: cleanPhone,
-        name: name.trim(),
-        email: email.trim() || `${name.trim().toLowerCase().replace(/\s+/g, '')}@sahay.org`,
+        role: role || 'citizen',
         ward: ward.trim() || 'Ward 12, Bhopal',
-        role,
-        mode: 'signup'
-      });
-    } catch (e: any) {
-      const msg =
-        e.response?.data?.error ||
-        e.userMessage ||
-        'Failed to send OTP. Please check your number and try again.';
-      setError(msg);
+        city: 'Bhopal',
+        xp: 100,
+        level: 1,
+        badges: ['New Sentinel'],
+        civicCoins: 50,
+      };
+
+      await login(userProfile, `token_${userProfile.id}`);
+    } catch (err) {
+      setError('Registration failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -118,6 +132,26 @@ export default function SignupScreen({ navigation }: any) {
             onChangeText={setEmail}
           />
 
+          {/* Password */}
+          <Text style={styles.inputLabel}>Set Password</Text>
+          <View style={styles.passwordWrapper}>
+            <Lock size={18} color="#64748B" style={{ marginRight: 8 }} />
+            <TextInput
+              style={styles.passwordInput}
+              placeholder="Minimum 4 characters"
+              placeholderTextColor="#9CA3AF"
+              secureTextEntry={!showPassword}
+              value={password}
+              onChangeText={(text) => {
+                setPassword(text);
+                if (error) setError('');
+              }}
+            />
+            <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={{ padding: 4 }}>
+              {showPassword ? <EyeOff size={18} color="#64748B" /> : <Eye size={18} color="#64748B" />}
+            </TouchableOpacity>
+          </View>
+
           {/* Ward / Location */}
           <Text style={styles.inputLabel}>Ward / City</Text>
           <TextInput
@@ -161,10 +195,17 @@ export default function SignupScreen({ navigation }: any) {
           <TouchableOpacity
             style={styles.submitBtn}
             onPress={handleRegister}
+            disabled={loading}
             activeOpacity={0.8}
           >
-            <Text style={styles.submitBtnText}>Verify via OTP</Text>
-            <ArrowRight size={18} color="#FFF" />
+            {loading ? (
+              <ActivityIndicator color="#FFF" />
+            ) : (
+              <>
+                <Text style={styles.submitBtnText}>Create Account</Text>
+                <ArrowRight size={18} color="#FFF" />
+              </>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -273,6 +314,22 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#0F172A',
   },
+  passwordWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  passwordInput: {
+    flex: 1,
+    paddingVertical: 12,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
   rolePickerRow: {
     flexDirection: 'row',
     gap: 12,
@@ -355,3 +412,4 @@ const styles = StyleSheet.create({
     color: '#0051D5',
   },
 });
+

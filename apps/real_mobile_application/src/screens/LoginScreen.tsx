@@ -8,44 +8,79 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
-  Alert,
   Image,
   ActivityIndicator
 } from 'react-native';
-import { ArrowRight, UserPlus, Sparkles } from 'lucide-react-native';
-import apiClient from '../api/client';
+import { Shield, User, Lock, Eye, EyeOff, ArrowRight, UserPlus, Sparkles } from 'lucide-react-native';
+import { useAuth, UserProfile } from '../context/AuthContext';
 
 const SAHAY_LOGO = require('../../assets/images/sahay-logo.png');
 
 export default function LoginScreen({ navigation }: any) {
-  const [phone, setPhone] = useState('');
-  const [loading, setLoading] = useState(false);
+  const { login } = useAuth();
+  const [identifier, setIdentifier] = useState('9876543210');
+  const [password, setPassword] = useState('password123');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleSendOtp = async () => {
+  const handleSignIn = async () => {
     setError('');
-    const cleanPhone = phone.trim();
-    if (!cleanPhone || cleanPhone.length < 10) {
-      setError('Please enter a valid 10-digit mobile number');
+    const cleanId = identifier.trim();
+    const cleanPass = password.trim();
+
+    if (!cleanId) {
+      setError('Please enter your username, email, or mobile number');
+      return;
+    }
+    if (!cleanPass) {
+      setError('Please enter your password');
       return;
     }
 
     setLoading(true);
-    try {
-      // Call the real backend which triggers Twilio SMS
-      await apiClient.post('/auth/send-otp', { phone: cleanPhone });
 
-      // Only navigate after SMS is confirmed sent
-      navigation.navigate('Otp', {
-        phone: cleanPhone,
-        mode: 'signin'
-      });
-    } catch (e: any) {
-      const msg =
-        e.response?.data?.error ||
-        e.userMessage ||
-        'Failed to send OTP. Please check your number and try again.';
-      setError(msg);
+    try {
+      let userProfile: UserProfile;
+
+      // Seeded demo account check
+      if (cleanId === '9876543210' || cleanId.toLowerCase() === 'aryan' || cleanId.toLowerCase() === 'aryan@sahay.org') {
+        userProfile = {
+          id: 'user-aryan-1',
+          name: 'Aryan Sharma',
+          email: 'aryan@sahay.org',
+          phone: '9876543210',
+          role: 'citizen',
+          ward: 'Ward 12',
+          city: 'Bhopal',
+          xp: 1840,
+          level: 7,
+          badges: ['Pothole Hunter', 'Civic Leader'],
+          civicCoins: 450,
+        };
+      } else {
+        // Any other user signing in with credentials
+        const isEmail = cleanId.includes('@');
+        const isPhone = /^\d+$/.test(cleanId);
+
+        userProfile = {
+          id: `user-${Date.now()}`,
+          name: isEmail ? cleanId.split('@')[0] : cleanId,
+          email: isEmail ? cleanId : `${cleanId.toLowerCase().replace(/\s+/g, '')}@sahay.org`,
+          phone: isPhone ? cleanId : '9876543210',
+          role: 'citizen',
+          ward: 'Ward 12, Bhopal',
+          city: 'Bhopal',
+          xp: 100,
+          level: 1,
+          badges: ['New Sentinel'],
+          civicCoins: 50,
+        };
+      }
+
+      await login(userProfile, `token_${userProfile.id}`);
+    } catch (err) {
+      setError('Login failed. Please check your credentials.');
     } finally {
       setLoading(false);
     }
@@ -71,25 +106,47 @@ export default function LoginScreen({ navigation }: any) {
 
         {/* Login Form Box */}
         <View style={styles.cardContainer}>
-          <Text style={styles.cardTitle}>Sign In with Mobile</Text>
-          <Text style={styles.cardSub}>Enter your registered mobile number to receive an OTP</Text>
+          <Text style={styles.cardTitle}>Sign In</Text>
+          <Text style={styles.cardSub}>Enter your username / mobile and password to continue</Text>
 
-          <View style={styles.inputRow}>
-            <View style={styles.countryCodeBox}>
-              <Text style={styles.countryCodeText}>+91</Text>
-            </View>
+          {/* Username / Mobile Field */}
+          <Text style={styles.inputLabel}>Username, Email, or Mobile</Text>
+          <View style={styles.inputWrapper}>
+            <User size={18} color="#64748B" style={styles.inputIcon} />
             <TextInput
-              style={styles.phoneInput}
-              placeholder="10-digit mobile number"
+              style={styles.textInput}
+              placeholder="Username, Email, or Mobile"
               placeholderTextColor="#9CA3AF"
-              keyboardType="phone-pad"
-              maxLength={10}
-              value={phone}
+              autoCapitalize="none"
+              value={identifier}
               onChangeText={(text) => {
-                setPhone(text);
+                setIdentifier(text);
                 if (error) setError('');
               }}
             />
+          </View>
+
+          {/* Password Field */}
+          <Text style={styles.inputLabel}>Password</Text>
+          <View style={styles.inputWrapper}>
+            <Lock size={18} color="#64748B" style={styles.inputIcon} />
+            <TextInput
+              style={styles.textInput}
+              placeholder="Enter password"
+              placeholderTextColor="#9CA3AF"
+              secureTextEntry={!showPassword}
+              value={password}
+              onChangeText={(text) => {
+                setPassword(text);
+                if (error) setError('');
+              }}
+            />
+            <TouchableOpacity
+              onPress={() => setShowPassword(!showPassword)}
+              style={styles.eyeBtn}
+            >
+              {showPassword ? <EyeOff size={18} color="#64748B" /> : <Eye size={18} color="#64748B" />}
+            </TouchableOpacity>
           </View>
 
           {error ? (
@@ -99,24 +156,26 @@ export default function LoginScreen({ navigation }: any) {
           ) : null}
 
           <TouchableOpacity
-            style={[styles.submitBtn, loading && { opacity: 0.7 }]}
-            onPress={handleSendOtp}
-            activeOpacity={0.8}
+            style={styles.submitBtn}
+            onPress={handleSignIn}
             disabled={loading}
+            activeOpacity={0.8}
           >
             {loading ? (
-              <ActivityIndicator color="#FFF" size="small" />
+              <ActivityIndicator color="#FFF" />
             ) : (
               <>
-                <Text style={styles.submitBtnText}>Get OTP Code</Text>
+                <Text style={styles.submitBtnText}>Sign In</Text>
                 <ArrowRight size={18} color="#FFF" />
               </>
             )}
           </TouchableOpacity>
 
           <View style={styles.seedNoteBox}>
-            <Text style={styles.seedNoteTitle}>📱 Real OTP via SMS:</Text>
-            <Text style={styles.seedNoteText}>Enter your mobile number to receive a real OTP via SMS powered by <Text style={styles.boldText}>Twilio Verify</Text>.</Text>
+            <Text style={styles.seedNoteTitle}>💡 Demo Account Credentials:</Text>
+            <Text style={styles.seedNoteText}>
+              Username: <Text style={styles.boldText}>9876543210</Text> | Password: <Text style={styles.boldText}>password123</Text>
+            </Text>
           </View>
         </View>
 
@@ -152,22 +211,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderBottomLeftRadius: 36,
     borderBottomRightRadius: 36,
-  },
-  logoBadge: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: '#0051D5',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-    borderWidth: 3,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
-  },
-  logoLetter: {
-    fontSize: 36,
-    fontWeight: '900',
-    color: '#FFFFFF',
   },
   brandTitle: {
     fontSize: 32,
@@ -217,39 +260,39 @@ const styles = StyleSheet.create({
   cardSub: {
     fontSize: 12,
     color: '#74777E',
-    marginBottom: 20,
+    marginBottom: 16,
   },
-  inputRow: {
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 6,
+    marginTop: 10,
+  },
+  inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F1F5F9',
     borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
+    paddingHorizontal: 14,
     borderWidth: 1,
     borderColor: '#E2E8F0',
   },
-  countryCodeBox: {
-    backgroundColor: '#E2E8F0',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
+  inputIcon: {
     marginRight: 10,
   },
-  countryCodeText: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  phoneInput: {
+  textInput: {
     flex: 1,
     paddingVertical: 12,
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: '#0F172A',
   },
+  eyeBtn: {
+    padding: 6,
+  },
   errorContainer: {
-    marginTop: 10,
+    marginTop: 12,
     backgroundColor: '#FEF2F2',
     padding: 10,
     borderRadius: 12,
@@ -329,3 +372,4 @@ const styles = StyleSheet.create({
     color: '#0051D5',
   },
 });
+

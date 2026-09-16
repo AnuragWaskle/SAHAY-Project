@@ -9,7 +9,6 @@ import { Home, Compass, PlusCircle, Award, User } from 'lucide-react-native';
 import { AuthContext, UserProfile } from './src/context/AuthContext';
 import LoginScreen from './src/screens/LoginScreen';
 import SignupScreen from './src/screens/SignupScreen';
-import OtpScreen from './src/screens/OtpScreen';
 
 import FeedScreen from './src/screens/FeedScreen';
 import DiscoverScreen from './src/screens/DiscoverScreen';
@@ -143,7 +142,6 @@ function AuthNavigator() {
     <AuthStack.Navigator id="authStack" screenOptions={{ headerShown: false }}>
       <AuthStack.Screen name="Login" component={LoginScreen} />
       <AuthStack.Screen name="Signup" component={SignupScreen} />
-      <AuthStack.Screen name="Otp" component={OtpScreen} />
     </AuthStack.Navigator>
   );
 }
