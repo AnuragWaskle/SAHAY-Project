@@ -217,7 +217,7 @@ export default function ProfileScreen({ navigation }: any) {
             </View>
           </TouchableOpacity>
 
-          <Text style={styles.profileName}>{(user?.name || user?.email || 'Seva Foundation NGO').toUpperCase()}</Text>
+          <Text style={styles.profileName}>{(user?.name || user?.email || 'Active Citizen').toUpperCase()}</Text>
 
           <View style={styles.levelTagPill}>
             <Award size={14} color="#7C3AED" />
@@ -226,7 +226,7 @@ export default function ProfileScreen({ navigation }: any) {
 
           <View style={styles.locationMetaRow}>
             <MapPin size={13} color="#7C3AED" />
-            <Text style={styles.locationMetaText}>Ward 12, Bhopal • Real Sentinel Account</Text>
+            <Text style={styles.locationMetaText}>{profile?.ward_name || user?.ward_name || 'Bhopal, MP'} • Civic Sentinel</Text>
           </View>
 
           {/* XP Progress Level Card */}
@@ -270,7 +270,7 @@ export default function ProfileScreen({ navigation }: any) {
             <Mail size={16} color="#7C3AED" />
             <View>
               <Text style={styles.contactLabel}>Email Address</Text>
-              <Text style={styles.contactVal}>{user?.email || 'seva.foundation@sahay.org'}</Text>
+              <Text style={styles.contactVal}>{user?.email || 'No email provided'}</Text>
             </View>
           </View>
 
@@ -278,7 +278,7 @@ export default function ProfileScreen({ navigation }: any) {
             <Phone size={16} color="#7C3AED" />
             <View>
               <Text style={styles.contactLabel}>Phone Number</Text>
-              <Text style={styles.contactVal}>+91 98260 11223</Text>
+              <Text style={styles.contactVal}>{profile?.phone || user?.phone || 'No phone number added'}</Text>
             </View>
           </View>
 
@@ -287,7 +287,7 @@ export default function ProfileScreen({ navigation }: any) {
             <View>
               <Text style={styles.contactLabel}>Verification Badge</Text>
               <Text style={[styles.contactVal, { color: '#10B981', fontWeight: '800' }]}>
-                Verified NGO & Community Partner ✅
+                {user?.role === 'ngo' ? 'Verified NGO Partner ✅' : 'Verified Community Member ✅'}
               </Text>
             </View>
           </View>
