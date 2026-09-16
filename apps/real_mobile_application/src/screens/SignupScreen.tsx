@@ -7,9 +7,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  StyleSheet
+  StyleSheet,
+  ActivityIndicator,
 } from 'react-native';
 import { ArrowRight, UserCheck, Shield, Building2, User } from 'lucide-react-native';
+import apiClient from '../api/client';
 
 export default function SignupScreen({ navigation }: any) {
   const [name, setName] = useState('');
@@ -18,8 +20,9 @@ export default function SignupScreen({ navigation }: any) {
   const [ward, setWard] = useState('Ward 12, Bhopal');
   const [role, setRole] = useState<'citizen' | 'ngo'>('citizen');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
     setError('');
     if (!name.trim()) {
       setError('Please enter your full name');
@@ -31,14 +34,28 @@ export default function SignupScreen({ navigation }: any) {
       return;
     }
 
-    navigation.navigate('Otp', {
-      phone: cleanPhone,
-      name: name.trim(),
-      email: email.trim() || `${name.trim().toLowerCase().replace(/\s+/g, '')}@sahay.org`,
-      ward: ward.trim() || 'Ward 12, Bhopal',
-      role,
-      mode: 'signup'
-    });
+    setLoading(true);
+    try {
+      // Send real OTP before navigating
+      await apiClient.post('/auth/send-otp', { phone: cleanPhone });
+
+      navigation.navigate('Otp', {
+        phone: cleanPhone,
+        name: name.trim(),
+        email: email.trim() || `${name.trim().toLowerCase().replace(/\s+/g, '')}@sahay.org`,
+        ward: ward.trim() || 'Ward 12, Bhopal',
+        role,
+        mode: 'signup'
+      });
+    } catch (e: any) {
+      const msg =
+        e.response?.data?.error ||
+        e.userMessage ||
+        'Failed to send OTP. Please check your number and try again.';
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

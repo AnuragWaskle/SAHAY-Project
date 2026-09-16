@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,10 +7,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
-  ActivityIndicator
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
-import { KeyRound, CheckCircle2, ArrowLeft, ShieldCheck } from 'lucide-react-native';
+import { KeyRound, CheckCircle2, ArrowLeft, ShieldCheck, RotateCcw } from 'lucide-react-native';
 import { useAuth, UserProfile } from '../context/AuthContext';
+import apiClient from '../api/client';
+import { setAuthToken } from '../api/client';
 
 export default function OtpScreen({ route, navigation }: any) {
   const { login } = useAuth();
@@ -19,66 +22,101 @@ export default function OtpScreen({ route, navigation }: any) {
   const [otp, setOtp] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [countdown, setCountdown] = useState(30); // 30s cooldown before resend
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Start countdown on mount
+  useEffect(() => {
+    startCountdown();
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
+
+  const startCountdown = () => {
+    setCountdown(30);
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          if (timerRef.current) clearInterval(timerRef.current);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  const handleResendOtp = async () => {
+    if (countdown > 0 || resending) return;
+    setResending(true);
+    setError('');
+    try {
+      await apiClient.post('/auth/send-otp', { phone });
+      startCountdown();
+      Alert.alert('OTP Resent', `A new OTP has been sent to +91 ${phone}`);
+    } catch (e: any) {
+      const msg = e.response?.data?.error || 'Failed to resend OTP. Please try again.';
+      setError(msg);
+    } finally {
+      setResending(false);
+    }
+  };
 
   const handleVerify = async () => {
     setError('');
     const cleanOtp = otp.trim();
 
     if (cleanOtp.length < 4) {
-      setError('Please enter the 4-digit OTP code');
-      return;
-    }
-
-    if (cleanOtp !== '0000') {
-      setError('Invalid OTP code. Please enter "0000" for verification.');
+      setError('Please enter the OTP code you received via SMS');
       return;
     }
 
     setLoading(true);
-
     try {
-      let userProfile: UserProfile;
-
-      if (mode === 'signup') {
-        userProfile = {
-          id: `user-${Date.now()}`,
-          name: name || 'Citizen Sentinel',
-          email: email || `${phone}@sahay.org`,
-          phone: phone,
+      // Call the real backend to verify OTP via Twilio
+      const response = await apiClient.post('/auth/verify-otp', {
+        phone,
+        code: cleanOtp,
+        // Pass signup info when creating a new account
+        ...(mode === 'signup' && {
+          name: name || undefined,
+          email: email || undefined,
           role: role || 'citizen',
-          ward: ward || 'Ward 12, Bhopal',
-          city: 'Bhopal',
-          xp: 100,
-          level: 1,
-          badges: ['New Sentinel'],
-          civicCoins: 50,
-        };
-      } else {
-        // Sign in mode: Seeded user or existing account
-        if (phone === '9876543210' || !phone) {
-          userProfile = {
-            id: 'user-aryan-1',
-            name: 'Aryan Sharma',
-            email: 'aryan@sahay.org',
-            phone: '9876543210',
-            role: 'citizen',
-            ward: 'Ward 12',
-            city: 'Bhopal',
-            xp: 1840,
-            level: 7,
-            badges: ['Pothole Hunter', 'Civic Leader'],
-            civicCoins: 450,
-          };
-        } else {
-          setError('Account not found. Please sign up first.');
-          setLoading(false);
-          return;
-        }
-      }
+        }),
+      });
 
-      await login(userProfile, `token_${userProfile.id}`);
-    } catch (err) {
-      setError('Verification failed. Please try again.');
+      const { token, user } = response.data.data;
+
+      // Set the auth token immediately so subsequent API calls are authenticated
+      setAuthToken(token);
+
+      // Build the UserProfile from the backend response
+      const userProfile: UserProfile = {
+        id: user.id,
+        name: user.name || `Citizen ${phone.slice(-4)}`,
+        email: user.email || `${phone}@sahay.org`,
+        phone: user.phone || phone,
+        role: user.role || 'citizen',
+        ward: ward || 'Bhopal',
+        city: 'Bhopal',
+        xp: user.civic_impact_score || 0,
+        level: user.level || 1,
+        badges: [],
+        civicCoins: user.civic_credits || 0,
+      };
+
+      // Login with real user data + real token from backend
+      await login(userProfile, token);
+    } catch (e: any) {
+      console.warn('[OtpScreen] Verify error:', e);
+      const msg =
+        e.response?.data?.error ||
+        e.userMessage ||
+        'OTP verification failed. Please check the code and try again.';
+      setError(msg);
+      setOtp('');
     } finally {
       setLoading(false);
     }
@@ -104,23 +142,26 @@ export default function OtpScreen({ route, navigation }: any) {
           <KeyRound size={36} color="#0051D5" />
         </View>
 
-        <Text style={styles.titleText}>Enter 4-Digit Code</Text>
+        <Text style={styles.titleText}>Enter Your OTP</Text>
         <Text style={styles.subText}>
-          Verification OTP sent to <Text style={styles.boldTarget}>+91 {phone || '9876543210'}</Text>
+          We sent a verification code to{' '}
+          <Text style={styles.boldTarget}>+91 {phone}</Text>
         </Text>
 
         <View style={styles.tipBanner}>
           <ShieldCheck size={16} color="#0051D5" />
-          <Text style={styles.tipBannerText}>Master Demo OTP Code: <Text style={styles.otpCodeBold}>0000</Text></Text>
+          <Text style={styles.tipBannerText}>
+            Real SMS sent via <Text style={styles.otpCodeBold}>Twilio Verify</Text>
+          </Text>
         </View>
 
         {/* OTP Input */}
         <TextInput
           style={styles.otpInput}
-          placeholder="0000"
+          placeholder="------"
           placeholderTextColor="#CBD5E1"
           keyboardType="number-pad"
-          maxLength={4}
+          maxLength={6}
           value={otp}
           onChangeText={(val) => {
             setOtp(val);
@@ -151,14 +192,24 @@ export default function OtpScreen({ route, navigation }: any) {
           )}
         </TouchableOpacity>
 
+        {/* Resend OTP */}
         <TouchableOpacity
-          style={styles.resendBtn}
-          onPress={() => {
-            setOtp('0000');
-            setError('');
-          }}
+          style={[styles.resendBtn, (countdown > 0 || resending) && { opacity: 0.5 }]}
+          onPress={handleResendOtp}
+          disabled={countdown > 0 || resending}
         >
-          <Text style={styles.resendText}>Didn't receive code? <Text style={styles.resendHighlight}>Auto-fill 0000</Text></Text>
+          {resending ? (
+            <ActivityIndicator size="small" color="#0051D5" />
+          ) : (
+            <View style={styles.resendRow}>
+              <RotateCcw size={14} color="#0051D5" />
+              <Text style={styles.resendText}>
+                {countdown > 0
+                  ? `Resend OTP in ${countdown}s`
+                  : "Didn't receive it? Resend OTP"}
+              </Text>
+            </View>
+          )}
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
@@ -240,20 +291,20 @@ const styles = StyleSheet.create({
   otpCodeBold: {
     fontWeight: '900',
     color: '#0051D5',
-    fontSize: 15,
+    fontSize: 13,
   },
   otpInput: {
-    width: 200,
-    height: 60,
+    width: 220,
+    height: 64,
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     borderWidth: 2,
     borderColor: '#0051D5',
-    fontSize: 32,
+    fontSize: 30,
     fontWeight: '900',
     color: '#0F172A',
     textAlign: 'center',
-    letterSpacing: 12,
+    letterSpacing: 10,
     marginBottom: 16,
     shadowColor: '#0051D5',
     shadowOpacity: 0.1,
@@ -296,14 +347,19 @@ const styles = StyleSheet.create({
   },
   resendBtn: {
     marginTop: 20,
-    padding: 8,
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 16,
+  },
+  resendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   resendText: {
     fontSize: 13,
-    color: '#64748B',
-  },
-  resendHighlight: {
     color: '#0051D5',
-    fontWeight: '800',
+    fontWeight: '700',
   },
 });

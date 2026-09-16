@@ -9,17 +9,20 @@ import {
   ScrollView,
   StyleSheet,
   Alert,
-  Image
+  Image,
+  ActivityIndicator
 } from 'react-native';
-import { Shield, PhoneCall, ArrowRight, UserPlus, Sparkles } from 'lucide-react-native';
+import { ArrowRight, UserPlus, Sparkles } from 'lucide-react-native';
+import apiClient from '../api/client';
 
 const SAHAY_LOGO = require('../../assets/images/sahay-logo.png');
 
 export default function LoginScreen({ navigation }: any) {
-  const [phone, setPhone] = useState('9876543210');
+  const [phone, setPhone] = useState('');
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSendOtp = () => {
+  const handleSendOtp = async () => {
     setError('');
     const cleanPhone = phone.trim();
     if (!cleanPhone || cleanPhone.length < 10) {
@@ -27,10 +30,25 @@ export default function LoginScreen({ navigation }: any) {
       return;
     }
 
-    navigation.navigate('Otp', {
-      phone: cleanPhone,
-      mode: 'signin'
-    });
+    setLoading(true);
+    try {
+      // Call the real backend which triggers Twilio SMS
+      await apiClient.post('/auth/send-otp', { phone: cleanPhone });
+
+      // Only navigate after SMS is confirmed sent
+      navigation.navigate('Otp', {
+        phone: cleanPhone,
+        mode: 'signin'
+      });
+    } catch (e: any) {
+      const msg =
+        e.response?.data?.error ||
+        e.userMessage ||
+        'Failed to send OTP. Please check your number and try again.';
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -81,17 +99,24 @@ export default function LoginScreen({ navigation }: any) {
           ) : null}
 
           <TouchableOpacity
-            style={styles.submitBtn}
+            style={[styles.submitBtn, loading && { opacity: 0.7 }]}
             onPress={handleSendOtp}
             activeOpacity={0.8}
+            disabled={loading}
           >
-            <Text style={styles.submitBtnText}>Get OTP Code</Text>
-            <ArrowRight size={18} color="#FFF" />
+            {loading ? (
+              <ActivityIndicator color="#FFF" size="small" />
+            ) : (
+              <>
+                <Text style={styles.submitBtnText}>Get OTP Code</Text>
+                <ArrowRight size={18} color="#FFF" />
+              </>
+            )}
           </TouchableOpacity>
 
           <View style={styles.seedNoteBox}>
-            <Text style={styles.seedNoteTitle}>💡 Demo Account Seeded:</Text>
-            <Text style={styles.seedNoteText}>Mobile: <Text style={styles.boldText}>9876543210</Text> | OTP: <Text style={styles.boldText}>0000</Text></Text>
+            <Text style={styles.seedNoteTitle}>📱 Real OTP via SMS:</Text>
+            <Text style={styles.seedNoteText}>Enter your mobile number to receive a real OTP via SMS powered by <Text style={styles.boldText}>Twilio Verify</Text>.</Text>
           </View>
         </View>
 
