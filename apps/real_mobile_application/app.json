@@ -23,7 +23,12 @@
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundColor": "#FFFFFF"
       },
-      "package": "com.anuragwaskle.sahayrealmobileapplication"
+      "package": "com.anuragwaskle.sahayrealmobileapplication",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyDummyKeyForTestingDoNotUseInProd"
+        }
+      }
     },
     "extra": {
       "eas": {
