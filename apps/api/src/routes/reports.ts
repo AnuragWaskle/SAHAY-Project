@@ -18,13 +18,34 @@ const reportLimiter = rateLimit({
 
 // ─── Schema Validation ────────────────────────────────────────
 
+const VALID_CATEGORIES = new Set([
+  'pothole', 'road_damage', 'waterlogging', 'garbage', 'streetlight', 'water_supply',
+  'sewage', 'encroachment', 'tree_hazard', 'air_pollution', 'noise_pollution',
+  'park_damage', 'stray_animals', 'safety', 'other'
+]);
+
+export function normalizeCategory(cat: string): string {
+  if (!cat) return 'other';
+  const lower = cat.toLowerCase().trim();
+  if (VALID_CATEGORIES.has(lower)) return lower;
+
+  if (lower.includes('road')) return 'road_damage';
+  if (lower.includes('pothole')) return 'pothole';
+  if (lower.includes('light') || lower.includes('power')) return 'streetlight';
+  if (lower.includes('water') || lower.includes('drain')) return 'waterlogging';
+  if (lower.includes('sanitat') || lower.includes('garb') || lower.includes('trash')) return 'garbage';
+  if (lower.includes('sewag')) return 'sewage';
+  if (lower.includes('safe') || lower.includes('hazard')) return 'safety';
+  if (lower.includes('tree') || lower.includes('park') || lower.includes('environ')) return 'tree_hazard';
+
+  return 'other';
+}
+
 const CreateReportSchema = z.object({
-  category: z.enum(['waterlogging','pothole','garbage','streetlight','water_supply',
-    'sewage','road_damage','encroachment','tree_hazard','air_pollution',
-    'noise_pollution','park_damage','stray_animals','safety','other']),
-  description: z.string().min(10).max(2000),
-  lat: z.number().min(8).max(37),   // India latitude bounds
-  lng: z.number().min(68).max(97),  // India longitude bounds
+  category: z.string().min(1).transform(normalizeCategory),
+  description: z.string().min(3).max(5000),
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
   address: z.string().optional(),
   ward_id: z.string().uuid().optional(),
   media_urls: z.array(z.string()).default([]),
@@ -253,14 +274,24 @@ router.post('/', requireAuth, reportLimiter, async (req: AuthRequest, res: Respo
         [clusteredIncidentId]
       );
     } else {
-      // Try to trigger clustering in background
+      // If not clustered via AI service, create an incident directly
       try {
-        axios.post(
-          `${process.env.AI_SERVICES_URL || 'http://localhost:8001'}/clustering/create-incident`,
-          { report_id: report.id, city_id: req.user?.city_id },
-          { timeout: 5000 }
-        ).catch(() => {});
-      } catch {}
+        const cityId = req.user?.city_id || '00000000-0000-0000-0000-000000000001';
+        const incRes = await query(
+          `INSERT INTO civic_incidents 
+            (city_id, ward_id, category, title, description, report_count, unique_citizen_count, severity, status, priority_score, location_center)
+           VALUES ($1, $2, $3, $4, $5, 1, 1, 'high', 'active', 8.5, ST_SetSRID(ST_MakePoint($6, $7), 4326))
+           RETURNING id`,
+          [cityId, wardId || null, body.category, `${body.category.toUpperCase().replace('_', ' ')} Issue Reported`, body.description, body.lng, body.lat]
+        );
+        const newIncId = incRes.rows[0]?.id;
+        if (newIncId) {
+          await query('UPDATE reports SET incident_id = $1 WHERE id = $2', [newIncId, report.id]);
+          report.incident_id = newIncId;
+        }
+      } catch (incErr) {
+        console.error('Failed to create incident record for report:', incErr);
+      }
     }
 
     // Update user's civic impact score (+5 for report submission)

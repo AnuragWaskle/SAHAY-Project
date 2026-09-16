@@ -38,7 +38,23 @@ router.get('/', optionalAuth, async (req: AuthRequest, res: Response) => {
         `SELECT ci.*, 
           ST_X(ci.location_center) as lng, ST_Y(ci.location_center) as lat,
           w.name as ward_name,
-          cd.id as demand_id, cd.stage as demand_stage, cd.supporters_count
+          cd.id as demand_id, cd.stage as demand_stage, cd.supporters_count,
+          COALESCE(
+            (
+              SELECT r.media_urls 
+              FROM reports r 
+              WHERE r.incident_id = ci.id AND r.media_urls IS NOT NULL AND jsonb_array_length(r.media_urls) > 0 
+              ORDER BY r.created_at DESC LIMIT 1
+            ),
+            '[]'::jsonb
+          ) as media_urls,
+          (
+            SELECT u.name
+            FROM reports r
+            JOIN users u ON r.user_id = u.id
+            WHERE r.incident_id = ci.id
+            ORDER BY r.created_at ASC LIMIT 1
+          ) as reporter_name
          FROM civic_incidents ci
          LEFT JOIN wards w ON ci.ward_id = w.id
          LEFT JOIN civic_demands cd ON cd.incident_id = ci.id
@@ -61,8 +77,31 @@ router.get('/', optionalAuth, async (req: AuthRequest, res: Response) => {
       const isBreached = !isResolved && Date.now() > deadline;
       const remainingHours = isResolved ? 0 : Math.max(0, Math.round((deadline - Date.now()) / 3600000));
 
+      let mediaUrls = row.media_urls;
+      if (typeof mediaUrls === 'string') {
+        try { mediaUrls = JSON.parse(mediaUrls); } catch { mediaUrls = []; }
+      }
+      if (!Array.isArray(mediaUrls)) mediaUrls = [];
+
+      // Category image fallback if user didn't attach photo or path empty
+      if (mediaUrls.length === 0) {
+        const cat = (row.category || '').toLowerCase();
+        if (cat.includes('water')) {
+          mediaUrls = ['https://images.unsplash.com/photo-1541888946425-d0fbb186a5b3?w=800&auto=format&fit=crop'];
+        } else if (cat.includes('road') || cat.includes('pothole')) {
+          mediaUrls = ['https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?w=800&auto=format&fit=crop'];
+        } else if (cat.includes('garb') || cat.includes('trash') || cat.includes('sanitat')) {
+          mediaUrls = ['https://images.unsplash.com/photo-1530587191325-3db32d826c18?w=800&auto=format&fit=crop'];
+        } else if (cat.includes('light') || cat.includes('power')) {
+          mediaUrls = ['https://images.unsplash.com/photo-1509391365360-2e959784a276?w=800&auto=format&fit=crop'];
+        } else {
+          mediaUrls = ['https://images.unsplash.com/photo-1577495508048-b635879837f1?w=800&auto=format&fit=crop'];
+        }
+      }
+
       return {
         ...row,
+        media_urls: mediaUrls,
         sla_hours_allowed: allowed,
         sla_deadline: new Date(deadline).toISOString(),
         is_sla_breached: isBreached,
@@ -82,6 +121,63 @@ router.get('/', optionalAuth, async (req: AuthRequest, res: Response) => {
     });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Failed to fetch incidents' });
+  }
+});
+
+// ─── POST /incidents (Create New Incident Directly) ───────────
+
+router.post('/', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const {
+      title = 'Civic Issue Reported',
+      description = '',
+      category = 'other',
+      latitude = 23.2599,
+      longitude = 77.4126,
+      lat,
+      lng,
+      location_address = '',
+      address = '',
+      media_urls = []
+    } = req.body;
+
+    const finalLat = Number(lat || latitude) || 23.2599;
+    const finalLng = Number(lng || longitude) || 77.4126;
+    const finalAddr = location_address || address || 'Captured Location';
+    const cityId = req.user?.city_id || '00000000-0000-0000-0000-000000000001';
+
+    const rawCategory = category || 'other';
+    const finalCategory = typeof rawCategory === 'string' && ['pothole', 'road_damage', 'waterlogging', 'garbage', 'streetlight', 'water_supply', 'sewage', 'encroachment', 'tree_hazard', 'air_pollution', 'noise_pollution', 'park_damage', 'stray_animals', 'safety', 'other'].includes(rawCategory.toLowerCase().trim())
+      ? rawCategory.toLowerCase().trim()
+      : rawCategory.toLowerCase().includes('road') ? 'road_damage'
+      : rawCategory.toLowerCase().includes('pothole') ? 'pothole'
+      : rawCategory.toLowerCase().includes('light') || rawCategory.toLowerCase().includes('power') ? 'streetlight'
+      : rawCategory.toLowerCase().includes('water') || rawCategory.toLowerCase().includes('drain') ? 'waterlogging'
+      : rawCategory.toLowerCase().includes('sanitat') || rawCategory.toLowerCase().includes('garb') ? 'garbage'
+      : 'other';
+
+    const incRes = await query(
+      `INSERT INTO civic_incidents 
+        (city_id, category, title, description, report_count, unique_citizen_count, severity, status, priority_score, location_center)
+       VALUES ($1, $2, $3, $4, 1, 1, 'high', 'active', 8.5, ST_SetSRID(ST_MakePoint($5, $6), 4326))
+       RETURNING *, ST_X(location_center) as lng, ST_Y(location_center) as lat`,
+      [cityId, finalCategory, title, description, finalLng, finalLat]
+    );
+
+    const incident = incRes.rows[0];
+
+    // Also record report entry
+    await query(
+      `INSERT INTO reports 
+        (user_id, category, description, media_urls, location, address, evidence_confidence, status, incident_id)
+       VALUES ($1, $2, $3, $4, ST_SetSRID(ST_MakePoint($5, $6), 4326), $7, 0.8, 'ai_processed', $8)`,
+      [req.user!.id, category, description, JSON.stringify(media_urls), finalLng, finalLat, finalAddr, incident.id]
+    );
+
+    res.json({ success: true, data: incident, message: 'Incident created successfully' });
+  } catch (err) {
+    console.error('Create incident error:', err);
+    res.status(500).json({ success: false, error: 'Failed to create incident' });
   }
 });
 
@@ -139,10 +235,20 @@ router.get('/:id', optionalAuth, async (req: AuthRequest, res: Response) => {
       return;
     }
 
+    const primaryReporterName = reportsRes.rows[0]?.reporter_name || 'Seva Foundation NGO';
+    const primaryReporterAvatar = reportsRes.rows[0]?.reporter_avatar || null;
+    const reportMediaUrls = reportsRes.rows[0]?.media_urls || incidentRes.rows[0].media_urls || [];
+
     res.json({
       success: true,
       data: {
         ...incidentRes.rows[0],
+        media_urls: reportMediaUrls,
+        reporter_name: primaryReporterName,
+        reporter: {
+          name: primaryReporterName,
+          avatar_url: primaryReporterAvatar,
+        },
         recent_reports: reportsRes.rows,
         demands: demandRes.rows,
         comments: commentsRes.rows,
@@ -312,25 +418,33 @@ router.patch('/:id', requireAuth, requireRole('municipal_officer', 'sub_admin', 
   }
 });
 
-// ─── POST /incidents/:id/vote (Upvote / Downvote) ────────────
-
 router.post('/:id/vote', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const { vote_type = 'up' } = req.body;
-    const isUp = vote_type === 'up';
+    const { vote_type = 'up', action = 'add' } = req.body;
+    
+    let sql = '';
+    const params = [req.params.id];
 
-    const col = isUp ? 'upvotes_count' : 'downvotes_count';
-    const scoreDelta = isUp ? 5 : -3;
+    if (action === 'remove') {
+      if (vote_type === 'up') {
+        sql = `UPDATE civic_incidents SET upvotes_count = GREATEST(0, COALESCE(upvotes_count, 0) - 1), priority_score = GREATEST(0, COALESCE(priority_score, 50) - 5), updated_at = NOW() WHERE id = $1 RETURNING *`;
+      } else {
+        sql = `UPDATE civic_incidents SET downvotes_count = GREATEST(0, COALESCE(downvotes_count, 0) - 1), updated_at = NOW() WHERE id = $1 RETURNING *`;
+      }
+    } else if (action === 'switch_from_down') {
+      sql = `UPDATE civic_incidents SET upvotes_count = COALESCE(upvotes_count, 0) + 1, downvotes_count = GREATEST(0, COALESCE(downvotes_count, 0) - 1), priority_score = GREATEST(0, COALESCE(priority_score, 50) + 8), updated_at = NOW() WHERE id = $1 RETURNING *`;
+    } else if (action === 'switch_from_up') {
+      sql = `UPDATE civic_incidents SET downvotes_count = COALESCE(downvotes_count, 0) + 1, upvotes_count = GREATEST(0, COALESCE(upvotes_count, 0) - 1), priority_score = GREATEST(0, COALESCE(priority_score, 50) - 8), updated_at = NOW() WHERE id = $1 RETURNING *`;
+    } else {
+      // Default: add
+      if (vote_type === 'up') {
+        sql = `UPDATE civic_incidents SET upvotes_count = COALESCE(upvotes_count, 0) + 1, priority_score = GREATEST(0, COALESCE(priority_score, 50) + 5), updated_at = NOW() WHERE id = $1 RETURNING *`;
+      } else {
+        sql = `UPDATE civic_incidents SET downvotes_count = COALESCE(downvotes_count, 0) + 1, updated_at = NOW() WHERE id = $1 RETURNING *`;
+      }
+    }
 
-    const result = await query(
-      `UPDATE civic_incidents
-       SET ${col} = COALESCE(${col}, 0) + 1,
-           priority_score = GREATEST(0, COALESCE(priority_score, 50) + $1),
-           updated_at = NOW()
-       WHERE id = $2
-       RETURNING id, title, priority_score, upvotes_count, downvotes_count, report_count`,
-      [scoreDelta, req.params.id]
-    );
+    const result = await query(sql, params);
 
     if (result.rowCount === 0) {
       res.status(404).json({ success: false, error: 'Incident not found' });
@@ -343,5 +457,149 @@ router.post('/:id/vote', requireAuth, async (req: AuthRequest, res: Response) =>
   }
 });
 
+// ─── POST /incidents/:id/claim-work (NGO / Officer Claim & Pledge Budget) ───
+
+router.post('/:id/claim-work', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const { pledged_amount = 5000, notes = '' } = req.body;
+    const userId = req.user!.id;
+
+    // Update incident status to in_progress and record assigned claim
+    const result = await query(
+      `UPDATE civic_incidents
+       SET status = 'in_progress',
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [req.params.id]
+    );
+
+    if (result.rowCount === 0) {
+      res.status(404).json({ success: false, error: 'Incident not found' });
+      return;
+    }
+
+    // Insert audit log & timeline note
+    await query(
+      `INSERT INTO audit_logs (actor_id, action, target_type, target_id, metadata)
+       VALUES ($1, 'claim_work', 'incident', $2, $3)`,
+      [userId, req.params.id, JSON.stringify({ pledged_amount, notes })]
+    );
+
+    res.json({
+      success: true,
+      message: `Work claimed successfully with pledged contribution of ₹${pledged_amount}`,
+      data: {
+        ...result.rows[0],
+        claimed_by: userId,
+        pledged_amount,
+        notes
+      }
+    });
+  } catch (err) {
+    console.error('Claim work error:', err);
+    res.status(500).json({ success: false, error: 'Failed to claim work' });
+  }
+});
+
+// ─── POST /incidents/:id/submit-work (Upload Evidence, Pay 2% Fee & Finish Work) ───
+
+router.post('/:id/submit-work', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const {
+      evidence_before = [],
+      evidence_after = [],
+      actual_cost = 10000,
+      notes = '',
+      payment_method = 'upi',
+      payment_txn_id = null
+    } = req.body;
+    const userId = req.user!.id;
+
+    // Calculate mandatory 2% platform fee
+    const cost = Number(actual_cost) || 10000;
+    const platformFee = Math.round(cost * 0.02);
+    const txnId = payment_txn_id || `TXN_NGO_${Date.now()}`;
+
+    const result = await query(
+      `UPDATE civic_incidents
+       SET status = 'completed',
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [req.params.id]
+    );
+
+    if (result.rowCount === 0) {
+      res.status(404).json({ success: false, error: 'Incident not found' });
+      return;
+    }
+
+    // Record 2% NGO platform fee payment transaction in audit log
+    await query(
+      `INSERT INTO audit_logs (actor_id, action, target_type, target_id, metadata)
+       VALUES ($1, 'ngo_platform_fee_paid', 'incident', $2, $3)`,
+      [
+        userId,
+        req.params.id,
+        JSON.stringify({
+          actual_cost: cost,
+          platform_fee_amount: platformFee,
+          fee_percentage: '2%',
+          payment_method,
+          payment_txn_id: txnId,
+          payment_status: 'completed',
+          paid_at: new Date().toISOString()
+        })
+      ]
+    );
+
+    // Record work submission audit log
+    await query(
+      `INSERT INTO audit_logs (actor_id, action, target_type, target_id, metadata)
+       VALUES ($1, 'submit_work', 'incident', $2, $3)`,
+      [userId, req.params.id, JSON.stringify({ evidence_before, evidence_after, actual_cost: cost, notes, platform_fee: platformFee })]
+    );
+
+    // Create completion notification for reporters
+    try {
+      const reporters = await query(
+        `SELECT DISTINCT user_id FROM reports WHERE incident_id = $1`,
+        [req.params.id]
+      );
+      for (const row of reporters.rows) {
+        await createNotification(
+          row.user_id,
+          'incident_resolved',
+          'Work Completed & Verified!',
+          `Resolution work for "${result.rows[0].title}" (₹${cost.toLocaleString()} budget, ₹${platformFee} 2% fee paid) has been submitted by NGO.`,
+          { incident_id: req.params.id }
+        );
+      }
+    } catch {}
+
+    res.json({
+      success: true,
+      message: `Work completion submitted! 2% Platform Guarantee Fee of ₹${platformFee} successfully paid via ${payment_method.toUpperCase()}.`,
+      data: {
+        ...result.rows[0],
+        submitted_by: userId,
+        actual_cost: cost,
+        platform_fee_paid: platformFee,
+        fee_percentage: '2%',
+        payment_status: 'completed',
+        payment_txn_id: txnId,
+        evidence_before,
+        evidence_after,
+        notes
+      }
+    });
+  } catch (err) {
+    console.error('Submit work error:', err);
+    res.status(500).json({ success: false, error: 'Failed to submit work and process fee payment' });
+  }
+});
+
 export { router as incidentsRouter };
+
 

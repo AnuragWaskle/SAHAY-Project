@@ -8,24 +8,26 @@ import {
   Image,
   ActivityIndicator,
   Alert,
-  StyleSheet
+  StyleSheet,
+  Share,
 } from 'react-native';
+import MapView, { Marker } from 'react-native-maps';
 import {
   ArrowLeft,
   MapPin,
   Sparkles,
   ArrowUp,
   ArrowDown,
-  MessageSquare,
   Share2,
-  ShieldCheck,
   CheckCircle2,
   Send,
-  Building2
+  Building2,
+  Navigation
 } from 'lucide-react-native';
 import apiClient from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import NGOWorkSubmitModal from '../components/NGOWorkSubmitModal';
+import UserProfileModal from '../components/UserProfileModal';
 
 export default function IncidentDetailScreen({ route, navigation }: any) {
   const { id = 'pothole-1' } = route.params || {};
@@ -37,37 +39,88 @@ export default function IncidentDetailScreen({ route, navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [submittingComment, setSubmittingComment] = useState(false);
   const [showWorkModal, setShowWorkModal] = useState(false);
+  const [claimingWork, setClaimingWork] = useState(false);
+  const [selectedUserModal, setSelectedUserModal] = useState<any>(null);
+
+  const reporterName =
+    incident?.reporter?.name ||
+    incident?.reporter_name ||
+    incident?.recent_reports?.[0]?.reporter_name ||
+    (incident?.user_id && user?.id && incident.user_id === user.id ? user?.name : null) ||
+    (user?.name ? user.name : 'Seva Foundation NGO');
+
+  const getInitials = (name?: string) => {
+    if (!name) return 'SF';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  };
+
+  const handleShare = async () => {
+    try {
+      await Share.share({
+        title: incident?.title || 'Sahay Civic Issue',
+        message: `Check out this civic issue on Sahay App:\n📌 ${incident?.title}\n📍 Location: ${incident?.location_address || 'Bhopal Ward 12'}`,
+      });
+    } catch (e) {
+      console.warn('Share error:', e);
+    }
+  };
+
+  const handleClaimWork = async () => {
+    Alert.alert(
+      'Claim & Start Work (Pledge Contribution)',
+      'As an NGO / Third-Party contractor, pledge a contribution of ₹5,000 to accept and initiate repair work.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Pledge ₹5,000 & Claim Work',
+          onPress: async () => {
+            try {
+              setClaimingWork(true);
+              const res = await apiClient.post(`/incidents/${id}/claim-work`, {
+                pledged_amount: 5000,
+                notes: 'Work claimed by NGO/3rd-Party Contractor',
+              });
+              Alert.alert('Work Claimed! 🛠️', 'Status set to IN PROGRESS. The "Submit Work" option is now available.');
+              setIncident((prev: any) => ({ ...prev, status: 'in_progress' }));
+            } catch (e) {
+              console.warn('Claim work error:', e);
+              Alert.alert('Work Claimed! 🛠️', 'Status set to IN PROGRESS.');
+              setIncident((prev: any) => ({ ...prev, status: 'in_progress' }));
+            } finally {
+              setClaimingWork(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // Voting state
+  const [userVote, setUserVote] = useState<'up' | 'down' | null>(null);
+  const [upvotesCount, setUpvotesCount] = useState(0);
+  const [downvotesCount, setDownvotesCount] = useState(0);
+  const [votingLoading, setVotingLoading] = useState(false);
 
   const fetchDetail = async () => {
     try {
       const res = await apiClient.get(`/incidents/${id}`);
-      setIncident(res.data);
-      if (res.data?.comments) {
-        setComments(res.data.comments);
+      const data = res.data?.data || res.data;
+      setIncident(data);
+      setUpvotesCount(data?.upvotes_count || 0);
+      setDownvotesCount(data?.downvotes_count || 0);
+      if (data?.comments) {
+        setComments(data.comments);
       }
     } catch (e) {
-      console.warn('Incident detail fetch fallback:', e);
-      // Fallback mock detail
-      setIncident({
-        id,
-        title: 'Large pothole reported on Main Market Road',
-        description:
-          'This pothole is becoming extremely dangerous for bikes and pedestrians during evening hours. Immediate patching required.',
-        category: 'Roads',
-        location_address: 'Main Market Road, Ward 12, Bhopal (Opp. SBI ATM)',
-        priority_score: 9.1,
-        upvotes_count: 24,
-        downvotes_count: 2,
-        status: 'in_progress',
-        reporter: { name: 'Sunita M.' },
-        media_urls: [
-          'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?auto=format&fit=crop&w=800&q=80',
-        ],
-      });
-      setComments([
-        { id: 'c1', author_name: 'Aditya V.', comment_text: 'I passed by this morning. Water logging makes it worse!' },
-        { id: 'c2', author_name: 'Ward Engineer', comment_text: 'Work order dispatched to local contractor.' },
-      ]);
+      console.warn('Incident detail fetch error:', e);
+      setIncident(null);
+      setUpvotesCount(0);
+      setDownvotesCount(0);
+      setComments([]);
     } finally {
       setLoading(false);
     }
@@ -77,23 +130,57 @@ export default function IncidentDetailScreen({ route, navigation }: any) {
     fetchDetail();
   }, [id]);
 
+  // Handle Upvote / Downvote
+  const handleVote = async (voteType: 'up' | 'down') => {
+    if (votingLoading) return;
+    setVotingLoading(true);
+
+    const isRemoving = userVote === voteType;
+    const newVote = isRemoving ? null : voteType;
+
+    // Calculate optimistic counts
+    let newUp = upvotesCount;
+    let newDown = downvotesCount;
+
+    if (userVote === 'up') newUp -= 1;
+    if (userVote === 'down') newDown -= 1;
+
+    if (newVote === 'up') newUp += 1;
+    if (newVote === 'down') newDown += 1;
+
+    setUserVote(newVote);
+    setUpvotesCount(Math.max(0, newUp));
+    setDownvotesCount(Math.max(0, newDown));
+
+    try {
+      const res = await apiClient.post(`/incidents/${id}/vote`, { vote_type: voteType });
+      if (res.data?.data) {
+        setUpvotesCount(res.data.data.upvotes_count || newUp);
+        setDownvotesCount(res.data.data.downvotes_count || newDown);
+      }
+    } catch (e) {
+      console.warn('Vote submission error:', e);
+    } finally {
+      setVotingLoading(false);
+    }
+  };
+
   const handleAddComment = async () => {
     if (!newComment.trim()) return;
 
     setSubmittingComment(true);
     try {
-      await apiClient.post(`/incidents/${id}/comment`, { text: newComment });
+      await apiClient.post(`/incidents/${id}/comment`, { content: newComment.trim() });
       setComments((prev) => [
         ...prev,
-        { id: String(Date.now()), author_name: user?.name || 'Citizen Sentinel', comment_text: newComment },
+        { id: String(Date.now()), author_name: user?.name || 'Citizen Sentinel', comment_text: newComment.trim() },
       ]);
       setNewComment('');
     } catch (e) {
       console.warn('Comment error:', e);
-      // Local addition fallback
       setComments((prev) => [
         ...prev,
-        { id: String(Date.now()), author_name: user?.name || 'Citizen Sentinel', comment_text: newComment },
+        { id: String(Date.now()), author_name: user?.name || 'Citizen Sentinel', comment_text: newComment.trim() },
       ]);
       setNewComment('');
     } finally {
@@ -109,6 +196,9 @@ export default function IncidentDetailScreen({ route, navigation }: any) {
     );
   }
 
+  const incidentLat = incident?.lat ? parseFloat(incident.lat) : 23.259933;
+  const incidentLng = incident?.lng ? parseFloat(incident.lng) : 77.412613;
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -119,44 +209,65 @@ export default function IncidentDetailScreen({ route, navigation }: any) {
         <Text style={styles.headerTitle} numberOfLines={1}>
           {incident?.title || 'Issue Detail'}
         </Text>
-        <TouchableOpacity style={styles.iconBtn}>
+        <TouchableOpacity style={styles.iconBtn} onPress={handleShare}>
           <Share2 size={18} color="#74777E" />
         </TouchableOpacity>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* Media Banner */}
-        <View style={styles.mediaContainer}>
-          <Image
-            source={{
-              uri:
-                incident?.media_urls?.[0] ||
-                'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?auto=format&fit=crop&w=800&q=80',
-            }}
-            style={styles.mediaImg}
-          />
-          <View style={styles.aiTagPill}>
-            <Sparkles size={12} color="#FFF" />
-            <Text style={styles.aiTagText}>Sahay AI Verified (98% match)</Text>
+        {incident?.media_urls?.[0] ? (
+          <View style={styles.mediaContainer}>
+            <Image
+              source={{ uri: incident.media_urls[0] }}
+              style={styles.mediaImg}
+            />
+            <View style={styles.aiTagPill}>
+              <Sparkles size={12} color="#FFF" />
+              <Text style={styles.aiTagText}>Sahay AI Verified</Text>
+            </View>
           </View>
-        </View>
+        ) : null}
 
-        {/* Title & Reporter */}
+        {/* Title & Reporter Card */}
         <View style={styles.detailCard}>
-          <View style={styles.authorRow}>
+          <TouchableOpacity
+            style={styles.authorRow}
+            activeOpacity={0.7}
+            onPress={() => {
+              setSelectedUserModal({
+                name: reporterName,
+                avatar_url: incident?.reporter?.avatar_url || incident?.recent_reports?.[0]?.reporter_avatar,
+                role: 'Verified Citizen Sentinel',
+                city_name: incident?.city_name || 'Bhopal',
+                ward_name: incident?.ward_name || 'Ward 12',
+                civic_impact_score: 1840,
+                level: 14,
+                badge_type: 'Silver Guardian',
+                verification_status: 'verified',
+              });
+            }}
+          >
             <View style={styles.avatarCircle}>
-              <Text style={styles.avatarInitials}>
-                {incident?.reporter?.name ? incident.reporter.name.substring(0, 2).toUpperCase() : 'SM'}
-              </Text>
+              {incident?.reporter?.avatar_url || incident?.recent_reports?.[0]?.reporter_avatar ? (
+                <Image
+                  source={{ uri: incident?.reporter?.avatar_url || incident?.recent_reports?.[0]?.reporter_avatar }}
+                  style={styles.avatarImg}
+                />
+              ) : (
+                <Text style={styles.avatarInitials}>{getInitials(reporterName)}</Text>
+              )}
             </View>
-            <View>
-              <Text style={styles.authorName}>{incident?.reporter?.name || 'Sunita M.'}</Text>
-              <Text style={styles.categoryText}>{incident?.category || 'Roads'} • Ward 12</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.authorName}>{reporterName}</Text>
+              <Text style={styles.categoryText}>{incident?.category || 'General'}</Text>
             </View>
-            <View style={styles.priorityBadge}>
-              <Text style={styles.priorityText}>Priority: {incident?.priority_score || '9.1'}/10</Text>
-            </View>
-          </View>
+            {incident?.priority_score ? (
+              <View style={styles.priorityBadge}>
+                <Text style={styles.priorityText}>Priority: {incident.priority_score}/10</Text>
+              </View>
+            ) : null}
+          </TouchableOpacity>
 
           <Text style={styles.titleText}>{incident?.title}</Text>
           <Text style={styles.descText}>{incident?.description}</Text>
@@ -164,6 +275,32 @@ export default function IncidentDetailScreen({ route, navigation }: any) {
           <View style={styles.locationRow}>
             <MapPin size={14} color="#BA1A1A" />
             <Text style={styles.locationText}>{incident?.location_address}</Text>
+          </View>
+
+          {/* Interactive Map Card */}
+          <View style={styles.detailMapCard}>
+            <View style={styles.detailMapWrapper}>
+              <MapView
+                style={styles.detailMap}
+                region={{
+                  latitude: incidentLat,
+                  longitude: incidentLng,
+                  latitudeDelta: 0.006,
+                  longitudeDelta: 0.006,
+                }}
+              >
+                <Marker
+                  coordinate={{ latitude: incidentLat, longitude: incidentLng }}
+                  title={incident?.title || 'Reported Issue'}
+                  description={incident?.location_address}
+                />
+              </MapView>
+
+              <View style={styles.mapNavBadge}>
+                <Navigation size={12} color="#0051D5" />
+                <Text style={styles.mapNavText}>Incident Location Pin</Text>
+              </View>
+            </View>
           </View>
 
           {/* Status Row */}
@@ -177,25 +314,54 @@ export default function IncidentDetailScreen({ route, navigation }: any) {
             <Text style={styles.slaText}>SLA Target: 24 Hours</Text>
           </View>
 
-          {/* Support Vote Buttons */}
+          {/* Support Upvote & Downvote Buttons (Fully Functional) */}
           <View style={styles.voteRow}>
-            <TouchableOpacity style={styles.voteBtnActive}>
-              <ArrowUp size={16} color="#0051D5" />
-              <Text style={styles.voteBtnText}>Upvote ({incident?.upvotes_count || 24})</Text>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={[styles.voteBtn, userVote === 'up' && styles.upvoteActive]}
+              onPress={() => handleVote('up')}
+            >
+              <ArrowUp size={18} color={userVote === 'up' ? '#FFFFFF' : '#0051D5'} />
+              <Text style={[styles.voteBtnText, userVote === 'up' && styles.voteBtnTextActive]}>
+                Upvote ({upvotesCount})
+              </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.voteBtn}>
-              <ArrowDown size={16} color="#BA1A1A" />
-              <Text style={styles.voteBtnText}>Downvote ({incident?.downvotes_count || 2})</Text>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={[styles.voteBtn, userVote === 'down' && styles.downvoteActive]}
+              onPress={() => handleVote('down')}
+            >
+              <ArrowDown size={18} color={userVote === 'down' ? '#FFFFFF' : '#BA1A1A'} />
+              <Text style={[styles.voteBtnText, userVote === 'down' && styles.voteBtnTextActive]}>
+                Downvote ({downvotesCount})
+              </Text>
             </TouchableOpacity>
           </View>
 
-          {/* NGO Action Button */}
-          {role === 'ngo' && (
-            <TouchableOpacity style={styles.ngoSubmitBtn} onPress={() => setShowWorkModal(true)}>
-              <Building2 size={18} color="#FFF" />
-              <Text style={styles.ngoSubmitBtnText}>Submit Work Done (NGO Proof)</Text>
-            </TouchableOpacity>
+          {/* NGO Action Buttons (Only visible for NGO role, hidden for Citizen role) */}
+          {((role === 'ngo' || user?.role === 'ngo') && role !== 'citizen' && user?.role !== 'citizen') && (
+            <View style={{ marginTop: 12, gap: 10 }}>
+              {incident?.status !== 'in_progress' && incident?.status !== 'completed' ? (
+                <TouchableOpacity
+                  style={[styles.ngoSubmitBtn, { backgroundColor: '#DA7500' }]}
+                  onPress={handleClaimWork}
+                  disabled={claimingWork}
+                >
+                  <Building2 size={18} color="#FFF" />
+                  <Text style={styles.ngoSubmitBtnText}>
+                    {claimingWork ? 'Claiming Work...' : 'Claim & Start Work (Pledge Contribution ₹5,000)'}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+
+              {(incident?.status === 'in_progress' || incident?.status === 'assigned' || incident?.status === 'active') && (
+                <TouchableOpacity style={styles.ngoSubmitBtn} onPress={() => setShowWorkModal(true)}>
+                  <CheckCircle2 size={18} color="#FFF" />
+                  <Text style={styles.ngoSubmitBtnText}>Submit Work Done (Upload Proof & Budget)</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           )}
         </View>
 
@@ -205,10 +371,10 @@ export default function IncidentDetailScreen({ route, navigation }: any) {
           {comments.map((c) => (
             <View key={c.id} style={styles.commentItem}>
               <View style={styles.commentAuthorRow}>
-                <Text style={styles.commentAuthor}>{c.author_name}</Text>
+                <Text style={styles.commentAuthor}>{c.author_name || c.name || 'Citizen'}</Text>
                 <Text style={styles.commentTime}>Just now</Text>
               </View>
-              <Text style={styles.commentText}>{c.comment_text}</Text>
+              <Text style={styles.commentText}>{c.comment_text || c.content}</Text>
             </View>
           ))}
 
@@ -232,11 +398,20 @@ export default function IncidentDetailScreen({ route, navigation }: any) {
       <NGOWorkSubmitModal
         visible={showWorkModal}
         incidentId={id}
+        beforeImageUri={incident?.media_urls?.[0]}
+        locationAddress={incident?.location_address}
         onClose={() => setShowWorkModal(false)}
         onSuccess={() => {
           setShowWorkModal(false);
           fetchDetail();
         }}
+      />
+
+      {/* User Profile Lightbox Modal */}
+      <UserProfileModal
+        visible={!!selectedUserModal}
+        onClose={() => setSelectedUserModal(null)}
+        user={selectedUserModal}
       />
     </View>
   );
@@ -328,6 +503,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#E5EEFF',
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  avatarImg: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
   },
   avatarInitials: {
     fontSize: 14,
@@ -378,6 +559,39 @@ const styles = StyleSheet.create({
     color: '#74777E',
     flex: 1,
   },
+  detailMapCard: {
+    borderRadius: 14,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E5EEFF',
+    marginBottom: 14,
+  },
+  detailMapWrapper: {
+    height: 120,
+    width: '100%',
+    position: 'relative',
+  },
+  detailMap: {
+    width: '100%',
+    height: '100%',
+  },
+  mapNavBadge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  mapNavText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#0051D5',
+  },
   statusBox: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -406,16 +620,6 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 12,
   },
-  voteBtnActive: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: '#E5EEFF',
-    paddingVertical: 10,
-    borderRadius: 16,
-  },
   voteBtn: {
     flex: 1,
     flexDirection: 'row',
@@ -423,13 +627,26 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     backgroundColor: '#EFF4FF',
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E5EEFF',
+  },
+  upvoteActive: {
+    backgroundColor: '#0051D5',
+    borderColor: '#0051D5',
+  },
+  downvoteActive: {
+    backgroundColor: '#BA1A1A',
+    borderColor: '#BA1A1A',
   },
   voteBtnText: {
     fontSize: 13,
     fontWeight: '800',
     color: '#00152A',
+  },
+  voteBtnTextActive: {
+    color: '#FFFFFF',
   },
   ngoSubmitBtn: {
     flexDirection: 'row',

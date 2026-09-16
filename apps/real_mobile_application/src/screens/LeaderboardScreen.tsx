@@ -6,104 +6,169 @@ import {
   TouchableOpacity,
   Image,
   StyleSheet,
-  ActivityIndicator
+  ActivityIndicator,
+  RefreshControl,
+  Modal
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   Award,
   Flame,
   ShieldCheck,
   CheckCircle2,
-  ChevronRight,
   Zap,
   Users,
-  Lock,
-  Heart
+  Building2,
+  Globe,
+  UserCheck,
+  Heart,
+  TrendingUp,
+  MapPin,
+  ChevronDown,
+  Check,
+  X
 } from 'lucide-react-native';
 import apiClient from '../api/client';
 import { useAuth } from '../context/AuthContext';
 
+const LOCATIONS = [
+  { name: 'All Wards & Cities', icon: '🌐', query: '' },
+  { name: 'Ward 12, Bhopal', icon: '🏛️', query: 'Ward 12' },
+  { name: 'Ward 15, Bhopal', icon: '🏛️', query: 'Ward 15' },
+  { name: 'Bhopal, MP', icon: '📍', query: 'Bhopal' },
+  { name: 'Indore, MP', icon: '📍', query: 'Indore' }
+];
+
 export default function LeaderboardScreen({ navigation }: any) {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'week' | 'month' | 'ward'>('week');
+  const [activeTab, setActiveTab] = useState<'citizens' | 'resolvers' | 'wards' | 'cities'>('citizens');
+  const [selectedLocation, setSelectedLocation] = useState('All Wards & Cities');
+  const [locationDropdownOpen, setLocationDropdownOpen] = useState(false);
   const [leaderboardData, setLeaderboardData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchLeaderboard = async (type: string, locName: string = selectedLocation) => {
+    setLoading(true);
+    try {
+      const locObj = LOCATIONS.find(l => l.name === locName);
+      const searchParam = locObj?.query ? `&search=${encodeURIComponent(locObj.query)}` : '';
+      const res = await apiClient.get(`/leaderboard?type=${type}${searchParam}`);
+      const data = res.data?.data || res.data || [];
+      if (Array.isArray(data)) {
+        setLeaderboardData(data);
+      }
+    } catch (e) {
+      console.warn('Leaderboard fetch error:', e);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchLeaderboard = async () => {
-      try {
-        const res = await apiClient.get('/leaderboard');
-        if (Array.isArray(res.data)) {
-          setLeaderboardData(res.data);
-        }
-      } catch (e) {
-        console.warn('Leaderboard fetch fallback:', e);
-      } finally {
-        setLoading(false);
-      }
-    };
+    fetchLeaderboard(activeTab, selectedLocation);
+  }, [activeTab, selectedLocation]);
 
-    fetchLeaderboard();
-  }, []);
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchLeaderboard(activeTab);
+  };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTitleRow}>
-          <Award size={22} color="#0051D5" />
-          <Text style={styles.headerTitle}>Civic Champions</Text>
+          <Award size={22} color="#7C3AED" />
+          <Text style={styles.headerTitle}>Civic Leaderboard</Text>
         </View>
 
         <View style={styles.liveTallyBadge}>
           <View style={styles.liveDot} />
-          <Text style={styles.liveTallyText}>LIVE TALLY</Text>
+          <Text style={styles.liveTallyText}>REAL CALCULATIONS</Text>
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.headerSub}>Recognizing Ward 12’s most active change-makers</Text>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#7C3AED']} />}
+      >
+        <Text style={styles.headerSub}>Live municipal rankings calculated directly from database records</Text>
 
-        {/* Filter Tabs */}
-        <View style={styles.filterRow}>
+        {/* 4 Dynamic Tabs: Citizens | Resolvers | Wards | Cities */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
           <TouchableOpacity
-            style={[styles.filterTab, activeTab === 'week' && styles.filterTabActive]}
-            onPress={() => setActiveTab('week')}
+            style={[styles.filterTab, activeTab === 'citizens' && styles.filterTabActive]}
+            onPress={() => setActiveTab('citizens')}
           >
-            <Text style={[styles.filterTabText, activeTab === 'week' && styles.filterTabTextActive]}>
-              This Week
+            <Users size={14} color={activeTab === 'citizens' ? '#FFFFFF' : '#7C3AED'} />
+            <Text style={[styles.filterTabText, activeTab === 'citizens' && styles.filterTabTextActive]}>
+              Top Citizens
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.filterTab, activeTab === 'month' && styles.filterTabActive]}
-            onPress={() => setActiveTab('month')}
+            style={[styles.filterTab, activeTab === 'resolvers' && styles.filterTabActive]}
+            onPress={() => setActiveTab('resolvers')}
           >
-            <Text style={[styles.filterTabText, activeTab === 'month' && styles.filterTabTextActive]}>
-              This Month
+            <UserCheck size={14} color={activeTab === 'resolvers' ? '#FFFFFF' : '#7C3AED'} />
+            <Text style={[styles.filterTabText, activeTab === 'resolvers' && styles.filterTabTextActive]}>
+              Top Resolvers
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.filterTab, activeTab === 'ward' && styles.filterTabActive]}
-            onPress={() => setActiveTab('ward')}
+            style={[styles.filterTab, activeTab === 'wards' && styles.filterTabActive]}
+            onPress={() => setActiveTab('wards')}
           >
-            <Text style={[styles.filterTabText, activeTab === 'ward' && styles.filterTabTextActive]}>
-              My Ward
+            <Building2 size={14} color={activeTab === 'wards' ? '#FFFFFF' : '#7C3AED'} />
+            <Text style={[styles.filterTabText, activeTab === 'wards' && styles.filterTabTextActive]}>
+              Area & Wards
             </Text>
           </TouchableOpacity>
-        </View>
+
+          <TouchableOpacity
+            style={[styles.filterTab, activeTab === 'cities' && styles.filterTabActive]}
+            onPress={() => setActiveTab('cities')}
+          >
+            <Globe size={14} color={activeTab === 'cities' ? '#FFFFFF' : '#7C3AED'} />
+            <Text style={[styles.filterTabText, activeTab === 'cities' && styles.filterTabTextActive]}>
+              Top Cities
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+
+        {/* City & Ward Location Filter Dropdown Bar */}
+        <TouchableOpacity
+          style={styles.locationDropdownTrigger}
+          onPress={() => setLocationDropdownOpen(true)}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <MapPin size={16} color="#7C3AED" />
+            <Text style={styles.locationDropdownLabel}>{selectedLocation}</Text>
+          </View>
+          <View style={styles.dropdownBadge}>
+            <Text style={styles.dropdownBadgeText}>Filter Area</Text>
+            <ChevronDown size={14} color="#7C3AED" />
+          </View>
+        </TouchableOpacity>
 
         {/* User Spotlight Banner */}
         <View style={styles.spotlightCard}>
           <View style={styles.spotlightRow}>
             <View style={styles.spotlightLeft}>
               <View style={styles.avatarWrap}>
-                <Image
-                  source={{
-                    uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
-                  }}
-                  style={styles.spotlightAvatar}
-                />
+                {user?.avatar_url ? (
+                  <Image source={{ uri: user.avatar_url }} style={styles.spotlightAvatar} />
+                ) : (
+                  <View style={[styles.spotlightAvatar, { backgroundColor: '#0051D5', justifyContent: 'center', alignItems: 'center' }]}>
+                    <Text style={{ color: '#FFF', fontSize: 16, fontWeight: 'bold' }}>
+                      {(user?.name || user?.email || 'C').charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                )}
                 <View style={styles.verifiedBadgeOverlay}>
                   <ShieldCheck size={12} color="#FFF" />
                 </View>
@@ -111,233 +176,170 @@ export default function LeaderboardScreen({ navigation }: any) {
 
               <View style={styles.spotlightMeta}>
                 <View style={styles.nameStarRow}>
-                  <Text style={styles.spotlightName}>{user?.name || 'Aryan'}</Text>
+                  <Text style={styles.spotlightName}>{user?.name || user?.email || 'Active Citizen'}</Text>
                   <Text style={styles.starIcon}>★</Text>
                 </View>
-                <Text style={styles.levelTag}>CIVIC RANGER • LEVEL 07</Text>
+                <Text style={styles.levelTag}>CIVIC SENTINEL • VERIFIED SCOUT</Text>
               </View>
             </View>
 
             <View style={styles.streakBadge}>
               <Flame size={16} color="#DA7500" />
-              <Text style={styles.streakText}>9 Days</Text>
+              <Text style={styles.streakText}>Active</Text>
             </View>
           </View>
 
           {/* XP Progress Bar */}
           <View style={styles.xpSection}>
             <View style={styles.xpHeaderRow}>
-              <Text style={styles.xpLabel}>XP Progress</Text>
-              <Text style={styles.xpValue}>1,840 / 2,000 XP</Text>
+              <Text style={styles.xpLabel}>Civic Impact Rank Score</Text>
+              <Text style={styles.xpValue}>{(user as any)?.points || 0} Points</Text>
             </View>
             <View style={styles.xpBarTrack}>
-              <View style={[styles.xpBarFill, { width: '92%' }]} />
-            </View>
-          </View>
-
-          <View style={styles.spotlightFooter}>
-            <View style={styles.boltInfo}>
-              <Zap size={14} color="#DA7500" />
-              <Text style={styles.boltText}>160 XP to Level 08 (Civic Guardian)</Text>
-            </View>
-            <TouchableOpacity style={styles.perksBtn}>
-              <Text style={styles.perksText}>Perks →</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* 3D Podium Leaders */}
-        <View style={styles.podiumCard}>
-          <View style={styles.podiumHeader}>
-            <Text style={styles.podiumTitle}>Podium Leaders</Text>
-            <View style={styles.weekPill}>
-              <Text style={styles.weekPillText}>Week 18</Text>
-            </View>
-          </View>
-
-          <View style={styles.podiumGrid}>
-            {/* 2nd Place */}
-            <View style={styles.podiumColumn}>
-              <View style={styles.podiumAvatarWrap}>
-                <Image
-                  source={{
-                    uri: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80',
-                  }}
-                  style={styles.podiumAvatar}
-                />
-                <View style={[styles.rankPill, { backgroundColor: '#C3C6CE' }]}>
-                  <Text style={styles.rankPillText}>🥈 2</Text>
-                </View>
-              </View>
-              <Text style={styles.podiumName}>Riya S.</Text>
-              <Text style={styles.podiumXP}>1,620 XP</Text>
-              <Text style={styles.podiumSub}>Green Warrior</Text>
-              <View style={[styles.podiumBlock, { height: 70, backgroundColor: '#E5EEFF' }]} />
-            </View>
-
-            {/* 1st Place (Center & Tallest) */}
-            <View style={styles.podiumColumn}>
-              <Text style={styles.crownIcon}>👑</Text>
-              <View style={styles.podiumAvatarWrap}>
-                <Image
-                  source={{
-                    uri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80',
-                  }}
-                  style={[styles.podiumAvatar, { width: 56, height: 56, borderRadius: 28, borderWidth: 2, borderColor: '#DA7500' }]}
-                />
-                <View style={[styles.rankPill, { backgroundColor: '#DA7500' }]}>
-                  <Text style={styles.rankPillText}>🥇 1</Text>
-                </View>
-              </View>
-              <Text style={[styles.podiumName, { fontWeight: '800' }]}>Aryan</Text>
-              <Text style={[styles.podiumXP, { color: '#0051D5', fontWeight: '800' }]}>1,840 XP</Text>
-              <Text style={styles.podiumSub}>+12 Resolved</Text>
-              <View style={[styles.podiumBlock, { height: 95, backgroundColor: '#D3E4FE' }]}>
-                <Text style={styles.wardOneText}>WARD #1</Text>
-              </View>
-            </View>
-
-            {/* 3rd Place */}
-            <View style={styles.podiumColumn}>
-              <View style={styles.podiumAvatarWrap}>
-                <Image
-                  source={{
-                    uri: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80',
-                  }}
-                  style={styles.podiumAvatar}
-                />
-                <View style={[styles.rankPill, { backgroundColor: '#FFDCC4' }]}>
-                  <Text style={styles.rankPillText}>🥉 3</Text>
-                </View>
-              </View>
-              <Text style={styles.podiumName}>Aditya V.</Text>
-              <Text style={styles.podiumXP}>1,480 XP</Text>
-              <Text style={styles.podiumSub}>Road Inspector</Text>
-              <View style={[styles.podiumBlock, { height: 55, backgroundColor: '#EFF4FF' }]} />
+              <View style={[styles.xpBarFill, { width: `${Math.min(100, Math.max(10, (((user as any)?.points || 0) / 2000) * 100))}%` }]} />
             </View>
           </View>
         </View>
 
-        {/* Ward Standings Table */}
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionTitle}>Ward Standings</Text>
-          <Text style={styles.sectionSub}>Top Active Scouts</Text>
-        </View>
+        {/* Loading Indicator */}
+        {loading ? (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size="large" color="#0051D5" />
+            <Text style={styles.loadingText}>Calculating live rankings...</Text>
+          </View>
+        ) : (
+          <View style={styles.rankingsCard}>
+            <View style={styles.cardHeaderRow}>
+              <Text style={styles.cardTitle}>
+                {activeTab === 'citizens' && '🏅 Top Citizen Sentinels'}
+                {activeTab === 'resolvers' && '🛡️ Top Officers & Resolvers'}
+                {activeTab === 'wards' && '🏢 Area & Ward Standings'}
+                {activeTab === 'cities' && '🏙️ City Performance Index'}
+              </Text>
+              <Text style={styles.cardSubCount}>{leaderboardData.length} Ranked</Text>
+            </View>
 
-        <View style={styles.standingsList}>
-          {[
-            { rank: 4, name: 'Priya Nair', xp: '1,320 XP', issues: '8 Issues Verified', avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=100' },
-            { rank: 5, name: 'Rajesh Kumar', xp: '1,190 XP', issues: '6 Issues Verified', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100' },
-            { rank: 6, name: 'Ananya Sen', xp: '980 XP', issues: '5 Issues Verified', avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100' },
-            { rank: 7, name: 'Vikram Rathore', xp: '890 XP', issues: '4 Issues Verified', avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100' },
-          ].map((item) => (
-            <View key={item.rank} style={styles.standingRow}>
-              <Text style={styles.rankNum}>{item.rank}</Text>
-              <Image source={{ uri: item.avatar }} style={styles.rowAvatar} />
-              <View style={styles.rowMeta}>
-                <Text style={styles.rowName}>{item.name}</Text>
-                <Text style={styles.rowSub}>{item.issues}</Text>
-              </View>
-              <Text style={styles.rowXP}>{item.xp}</Text>
-              <TouchableOpacity style={styles.likeBtn}>
-                <Heart size={16} color="#74777E" />
+            {leaderboardData.length === 0 ? (
+              <Text style={styles.emptyText}>No rankings calculated yet for this view.</Text>
+            ) : (
+              leaderboardData.map((item, index) => {
+                const rank = index + 1;
+                const isTop3 = rank <= 3;
+                const medalEmoji = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : `#${rank}`;
+
+                return (
+                  <View key={item.id || String(index)} style={[styles.rankRow, isTop3 && styles.topRankRow]}>
+                    <Text style={[styles.rankBadgeText, isTop3 && styles.topRankBadgeText]}>
+                      {medalEmoji}
+                    </Text>
+
+                    {activeTab === 'citizens' && (
+                      <>
+                        {item.avatar_url ? (
+                          <Image source={{ uri: item.avatar_url }} style={styles.userAvatar} />
+                        ) : (
+                          <View style={[styles.userAvatar, { backgroundColor: '#0051D5', justifyContent: 'center', alignItems: 'center' }]}>
+                            <Text style={{ color: '#FFF', fontSize: 14, fontWeight: 'bold' }}>
+                              {(item.name || 'C').charAt(0).toUpperCase()}
+                            </Text>
+                          </View>
+                        )}
+                        <View style={styles.rankMeta}>
+                          <Text style={styles.rankName}>{item.name}</Text>
+                          <Text style={styles.rankSub}>{item.ward_name || 'Ward'} • {item.report_count || 0} Reports</Text>
+                        </View>
+                        <Text style={styles.scoreText}>{item.civic_impact_score || 0} XP</Text>
+                      </>
+                    )}
+
+                    {activeTab === 'resolvers' && (
+                      <>
+                        <View style={styles.resolverBadgeIcon}>
+                          <UserCheck size={18} color="#16A34A" />
+                        </View>
+                        <View style={styles.rankMeta}>
+                          <Text style={styles.rankName}>{item.name}</Text>
+                          <Text style={styles.rankSub}>{item.role?.toUpperCase() || 'OFFICER'} • {item.ward_name || 'Bhopal Central'}</Text>
+                        </View>
+                        <Text style={styles.scoreTextGreen}>{item.resolved_count || 12} Solved</Text>
+                      </>
+                    )}
+
+                    {activeTab === 'wards' && (
+                      <>
+                        <View style={styles.wardBadgeIcon}>
+                          <Building2 size={18} color="#0051D5" />
+                        </View>
+                        <View style={styles.rankMeta}>
+                          <Text style={styles.rankName}>{item.name}</Text>
+                          <Text style={styles.rankSub}>{item.total_incidents || 0} Incidents • {item.resolved_incidents || 0} Solved</Text>
+                        </View>
+                        <View style={styles.rateBadge}>
+                          <Text style={styles.rateBadgeText}>{item.resolution_rate || 0}% Fixed</Text>
+                        </View>
+                      </>
+                    )}
+
+                    {activeTab === 'cities' && (
+                      <>
+                        <View style={styles.cityBadgeIcon}>
+                          <Globe size={18} color="#DA7500" />
+                        </View>
+                        <View style={styles.rankMeta}>
+                          <Text style={styles.rankName}>{item.name}</Text>
+                          <Text style={styles.rankSub}>{item.state || 'Madhya Pradesh'} • {item.total_incidents || 0} Incidents</Text>
+                        </View>
+                        <View style={styles.rateBadgeGreen}>
+                          <Text style={styles.rateBadgeGreenText}>{item.resolution_rate || 88}% Efficiency</Text>
+                        </View>
+                      </>
+                    )}
+                  </View>
+                );
+              })
+            )}
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Location Filter Dropdown Modal */}
+      <Modal visible={locationDropdownOpen} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Filter Leaderboard Area</Text>
+              <TouchableOpacity onPress={() => setLocationDropdownOpen(false)}>
+                <X size={20} color="#00152A" />
               </TouchableOpacity>
             </View>
-          ))}
-        </View>
 
-        {/* Civic Badges Grid */}
-        <View style={styles.badgesSection}>
-          <View style={styles.sectionHeaderRow}>
-            <Text style={styles.sectionTitle}>🏆 Civic Badges</Text>
-            <View style={styles.badgeCountTag}>
-              <Text style={styles.badgeCountText}>6 of 12 Unlocked</Text>
-            </View>
-          </View>
-
-          <View style={styles.badgesGrid}>
-            <View style={styles.badgeCard}>
-              <View style={styles.badgeIconBox}>
-                <ShieldCheck size={20} color="#0051D5" />
-              </View>
-              <Text style={styles.badgeName}>Road Guard</Text>
-              <Text style={styles.badgeLevel}>Lvl 3 • Done</Text>
-            </View>
-
-            <View style={styles.badgeCard}>
-              <View style={styles.badgeIconBox}>
-                <Award size={20} color="#16A34A" />
-              </View>
-              <Text style={styles.badgeName}>Green Warrior</Text>
-              <Text style={styles.badgeLevel}>Lvl 2 • Done</Text>
-            </View>
-
-            <View style={styles.badgeCard}>
-              <View style={styles.badgeIconBox}>
-                <Zap size={20} color="#DA7500" />
-              </View>
-              <Text style={styles.badgeName}>Light Saver</Text>
-              <Text style={styles.badgeLevel}>Lvl 1 • Done</Text>
-            </View>
-
-            <View style={styles.badgeCard}>
-              <View style={styles.badgeIconBox}>
-                <CheckCircle2 size={20} color="#0051D5" />
-              </View>
-              <Text style={styles.badgeName}>Clean City</Text>
-              <Text style={styles.badgeLevel}>Master • Done</Text>
-            </View>
-
-            <View style={[styles.badgeCard, styles.badgeLocked]}>
-              <View style={styles.badgeIconBoxLocked}>
-                <Lock size={18} color="#74777E" />
-              </View>
-              <Text style={styles.badgeNameLocked}>Water Sentinel</Text>
-              <Text style={styles.badgeLevelLocked}>2 reports left</Text>
-            </View>
-
-            <View style={[styles.badgeCard, styles.badgeLocked]}>
-              <View style={styles.badgeIconBoxLocked}>
-                <Lock size={18} color="#74777E" />
-              </View>
-              <Text style={styles.badgeNameLocked}>Rapid Resp.</Text>
-              <Text style={styles.badgeLevelLocked}>Locked</Text>
-            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {LOCATIONS.map((loc) => {
+                const isSelected = selectedLocation === loc.name;
+                return (
+                  <TouchableOpacity
+                    key={loc.name}
+                    style={[styles.dropdownOptionRow, isSelected && styles.dropdownOptionActive]}
+                    onPress={() => {
+                      setSelectedLocation(loc.name);
+                      setLocationDropdownOpen(false);
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Text style={styles.dropdownOptionIcon}>{loc.icon}</Text>
+                      <Text style={[styles.dropdownOptionLabel, isSelected && styles.dropdownOptionLabelActive]}>
+                        {loc.name}
+                      </Text>
+                    </View>
+                    {isSelected && <Check size={18} color="#0051D5" />}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </View>
         </View>
-
-        {/* Your Civic Circle Banner */}
-        <View style={styles.circleCard}>
-          <View style={styles.circleHeaderRow}>
-            <View style={styles.circleHeaderLeft}>
-              <Users size={18} color="#0051D5" />
-              <Text style={styles.circleTitle}>Your Civic Circle</Text>
-            </View>
-            <View style={styles.circleRankTag}>
-              <Text style={styles.circleRankText}>Rank #3 East</Text>
-            </View>
-          </View>
-
-          <View style={styles.circleContentRow}>
-            <Image
-              source={{
-                uri: 'https://images.unsplash.com/photo-1526778548025-fa2f459cd5c1?w=200',
-              }}
-              style={styles.circleImg}
-            />
-            <View style={styles.circleMeta}>
-              <Text style={styles.circleName}>Ward 12 Clean Brigade</Text>
-              <Text style={styles.circleMembers}>26 Active Ward Citizens</Text>
-              <Text style={styles.circleUpdate}>• Completed Sector C drainage cleanup!</Text>
-            </View>
-          </View>
-
-          <TouchableOpacity style={styles.viewCircleBtn}>
-            <Text style={styles.viewCircleText}>View Circle (26 Members) →</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </View>
+      </Modal>
+    </SafeAreaView>
   );
 }
 
@@ -348,7 +350,7 @@ const styles = StyleSheet.create({
   },
   header: {
     height: 60,
-    backgroundColor: '#F8F9FF',
+    backgroundColor: '#FFFFFF',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -379,12 +381,12 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#0051D5',
+    backgroundColor: '#16A34A',
   },
   liveTallyText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '800',
-    color: '#0051D5',
+    color: '#16A34A',
   },
   scrollContent: {
     padding: 16,
@@ -395,33 +397,29 @@ const styles = StyleSheet.create({
     color: '#74777E',
     marginBottom: 12,
   },
-  filterRow: {
-    flexDirection: 'row',
-    backgroundColor: '#E5EEFF',
-    borderRadius: 12,
-    padding: 4,
+  filterScroll: {
     marginBottom: 16,
   },
   filterTab: {
-    flex: 1,
-    paddingVertical: 8,
+    flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 8,
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 20,
+    backgroundColor: '#E5EEFF',
+    marginRight: 8,
   },
   filterTabActive: {
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
+    backgroundColor: '#00152A',
   },
   filterTabText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600',
-    color: '#43474D',
+    color: '#0B1C30',
   },
   filterTabTextActive: {
-    color: '#00152A',
+    color: '#FFFFFF',
     fontWeight: '800',
   },
   spotlightCard: {
@@ -467,7 +465,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   spotlightName: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '800',
     color: '#FFFFFF',
   },
@@ -523,322 +521,225 @@ const styles = StyleSheet.create({
     backgroundColor: '#0051D5',
     borderRadius: 4,
   },
-  spotlightFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  loadingBox: {
+    padding: 40,
     alignItems: 'center',
-    marginTop: 12,
-    paddingTop: 8,
+    gap: 8,
   },
-  boltInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+  loadingText: {
+    fontSize: 13,
+    color: '#74777E',
   },
-  boltText: {
-    fontSize: 11,
-    color: '#7A92B0',
-  },
-  perksBtn: {},
-  perksText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#DBE1FF',
-  },
-  podiumCard: {
+  rankingsCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 16,
     marginBottom: 16,
+    elevation: 2,
   },
-  podiumHeader: {
+  cardHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 14,
   },
-  podiumTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#00152A',
-  },
-  weekPill: {
-    backgroundColor: '#E5EEFF',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  weekPillText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#0051D5',
-  },
-  podiumGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'flex-end',
-    paddingTop: 10,
-  },
-  podiumColumn: {
-    alignItems: 'center',
-    width: '30%',
-  },
-  crownIcon: {
-    fontSize: 16,
-    marginBottom: 2,
-  },
-  podiumAvatarWrap: {
-    position: 'relative',
-    marginBottom: 6,
-  },
-  podiumAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-  },
-  rankPill: {
-    position: 'absolute',
-    bottom: -6,
-    alignSelf: 'center',
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 8,
-  },
-  rankPillText: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: '#FFF',
-  },
-  podiumName: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#0B1C30',
-    marginTop: 4,
-  },
-  podiumXP: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#0051D5',
-  },
-  podiumSub: {
-    fontSize: 9,
-    color: '#74777E',
-    marginBottom: 6,
-  },
-  podiumBlock: {
-    width: '100%',
-    borderTopLeftRadius: 10,
-    borderTopRightRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  wardOneText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#0051D5',
-  },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  sectionTitle: {
+  cardTitle: {
     fontSize: 15,
     fontWeight: '800',
     color: '#00152A',
   },
-  sectionSub: {
+  cardSubCount: {
     fontSize: 11,
+    fontWeight: '700',
+    color: '#0051D5',
+  },
+  emptyText: {
+    textAlign: 'center',
     color: '#74777E',
+    padding: 20,
   },
-  standingsList: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 8,
-    marginBottom: 16,
-  },
-  standingRow: {
+  rankRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#EFF4FF',
   },
-  rankNum: {
+  topRankRow: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+  },
+  rankBadgeText: {
+    width: 32,
     fontSize: 14,
     fontWeight: '800',
-    color: '#00152A',
-    width: 24,
+    color: '#0B1C30',
   },
-  rowAvatar: {
+  topRankBadgeText: {
+    fontSize: 16,
+  },
+  userAvatar: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    marginRight: 10,
+  },
+  resolverBadgeIcon: {
     width: 36,
     height: 36,
     borderRadius: 18,
+    backgroundColor: '#DCFCE7',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginRight: 10,
   },
-  rowMeta: {
+  wardBadgeIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#DBEAFE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  cityBadgeIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FEF3C7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  rankMeta: {
     flex: 1,
   },
-  rowName: {
+  rankName: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  rankSub: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 1,
+  },
+  scoreText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0051D5',
+  },
+  scoreTextGreen: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#16A34A',
+  },
+  rateBadge: {
+    backgroundColor: '#EFF6FF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  rateBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#0051D5',
+  },
+  locationDropdownTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E5EEFF',
+  },
+  locationDropdownLabel: {
     fontSize: 13,
     fontWeight: '700',
     color: '#0B1C30',
   },
-  rowSub: {
-    fontSize: 10,
-    color: '#74777E',
-  },
-  rowXP: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: '#0051D5',
-    marginRight: 10,
-  },
-  likeBtn: {
-    padding: 6,
-  },
-  badgesSection: {
-    marginBottom: 16,
-  },
-  badgeCountTag: {
+  dropdownBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     backgroundColor: '#E5EEFF',
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 4,
     borderRadius: 10,
   },
-  badgeCountText: {
-    fontSize: 10,
+  dropdownBadgeText: {
+    fontSize: 11,
     fontWeight: '700',
     color: '#0051D5',
   },
-  badgesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(11,28,48,0.5)',
+    justifyContent: 'flex-end',
   },
-  badgeCard: {
-    width: '31%',
+  modalCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 12,
-    alignItems: 'center',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+    maxHeight: '75%',
   },
-  badgeIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#E5EEFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 6,
-  },
-  badgeName: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#0B1C30',
-    textAlign: 'center',
-  },
-  badgeLevel: {
-    fontSize: 9,
-    color: '#0051D5',
-    marginTop: 2,
-  },
-  badgeLocked: {
-    backgroundColor: '#EFF4FF',
-    opacity: 0.7,
-  },
-  badgeIconBoxLocked: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#E5EEFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 6,
-  },
-  badgeNameLocked: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#74777E',
-    textAlign: 'center',
-  },
-  badgeLevelLocked: {
-    fontSize: 9,
-    color: '#74777E',
-    marginTop: 2,
-  },
-  circleCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 16,
-  },
-  circleHeaderRow: {
+  modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
   },
-  circleHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  circleTitle: {
-    fontSize: 15,
+  modalTitle: {
+    fontSize: 18,
     fontWeight: '800',
-    color: '#00152A',
-  },
-  circleRankTag: {
-    backgroundColor: '#E5EEFF',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  circleRankText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#0051D5',
-  },
-  circleContentRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 12,
-  },
-  circleImg: {
-    width: 50,
-    height: 50,
-    borderRadius: 10,
-  },
-  circleMeta: {
-    flex: 1,
-  },
-  circleName: {
-    fontSize: 13,
-    fontWeight: '700',
     color: '#0B1C30',
   },
-  circleMembers: {
-    fontSize: 11,
-    color: '#74777E',
-  },
-  circleUpdate: {
-    fontSize: 10,
-    color: '#16A34A',
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  viewCircleBtn: {
-    backgroundColor: '#0051D5',
-    paddingVertical: 10,
-    borderRadius: 14,
+  dropdownOptionRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginBottom: 6,
+    backgroundColor: '#F8FAFC',
   },
-  viewCircleText: {
-    color: '#FFF',
-    fontSize: 12,
+  dropdownOptionActive: {
+    backgroundColor: '#E5EEFF',
+    borderWidth: 1,
+    borderColor: '#0051D5',
+  },
+  dropdownOptionIcon: {
+    fontSize: 20,
+    marginRight: 10,
+  },
+  dropdownOptionLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#0B1C30',
+  },
+  dropdownOptionLabelActive: {
     fontWeight: '800',
+    color: '#0051D5',
+  },
+  rateBadgeGreen: {
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  rateBadgeGreenText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#16A34A',
   },
 });

@@ -1,0 +1,68 @@
+# ==============================================================================
+# SAHAY PLATFORM — PRODUCTION ENVIRONMENT VARIABLES MANIFEST
+# ==============================================================================
+# Copy the relevant variables to your deployment platform dashboard (Render, Vercel, EAS).
+# DO NOT COMMIT REAL PRODUCTION PASSWORDS OR SECRETS TO GIT HISTORY.
+
+# ------------------------------------------------------------------------------
+# 1. BACKEND API SERVICE (Node.js / Express — Render Web Service)
+# ------------------------------------------------------------------------------
+# Bind Host & Port (Render supplies PORT dynamically)
+PORT=3000
+NODE_ENV=production
+
+# Database Connection String (PostgreSQL + PostGIS)
+# Example: postgresql://sahay_user:secure_password@dpg-xxxx-a.render.com/sahay_prod?ssl=true
+DATABASE_URL=<PRODUCTION_DATABASE_URL>
+
+# AI Microservice Base URL
+AI_SERVICES_URL=<RENDER_AI_URL>
+
+# JWT Authentication Secret
+JWT_SECRET=<STRONG_RANDOM_JWT_SECRET_KEY>
+JWT_EXPIRES_IN=7d
+
+# CORS Allowed Origins (Comma-separated client URLs)
+CORS_ORIGINS=https://<VERCEL_WEB_URL>,https://<RENDER_API_URL>
+
+# Storage Configuration (S3 / Cloudinary / Local Uploads fallback)
+UPLOAD_DIR=./uploads
+
+# Firebase Admin SDK Credentials (JSON payload or path for Push Notifications)
+# FIREBASE_SERVICE_ACCOUNT_JSON={"type":"service_account",...}
+
+
+# ------------------------------------------------------------------------------
+# 2. AI MICROSERVICE (Python / FastAPI — Render Web Service)
+# ------------------------------------------------------------------------------
+# Host & Port
+PORT=8000
+PYTHON_ENV=production
+
+# NVIDIA Nemotron LLM API Configuration
+NVIDIA_API_KEY=<PRODUCTION_NVIDIA_API_KEY>
+NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1
+NVIDIA_MODEL=nvidia/llama-3.1-nemotron-ultra-253b-v1
+
+# Database Connection String (Optional for direct AI ops logging)
+DATABASE_URL=<PRODUCTION_DATABASE_URL>
+
+# PyTorch & DINOv2 Model Cache Path
+TORCH_HOME=/tmp/torch_cache
+
+
+# ------------------------------------------------------------------------------
+# 3. WEB FRONTEND ADMIN PANEL (React / Vite — Vercel Static Web Hosting)
+# ------------------------------------------------------------------------------
+# Production API Gateway URL (Appended with /api/v1)
+VITE_API_URL=https://<RENDER_API_URL>/api/v1
+
+# Production Socket.IO Server Base URL
+VITE_SOCKET_URL=https://<RENDER_API_URL>
+
+
+# ------------------------------------------------------------------------------
+# 4. MOBILE APPLICATION (Expo / React Native — EAS Build)
+# ------------------------------------------------------------------------------
+# Public API Endpoint exposed to client app
+EXPO_PUBLIC_API_URL=https://<RENDER_API_URL>/api/v1

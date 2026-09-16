@@ -36,7 +36,16 @@ const Login = ({ setRole }: { setRole: (role: string) => void }) => {
         <div className="absolute -top-20 -left-20 w-40 h-40 bg-brand-orange/30 rounded-full blur-3xl"></div>
         <div className="absolute -bottom-20 -right-20 w-40 h-40 bg-brand-blue/30 rounded-full blur-3xl"></div>
         
-        <h2 className="text-4xl font-extrabold text-gradient mb-2 relative z-10">Welcome to Sahay</h2>
+        <div className="flex flex-col items-center mb-6 relative z-10">
+          <img
+            src="/sahay-logo.jpg"
+            alt="Sahay"
+            className="w-20 h-20 rounded-2xl object-cover shadow-xl border-4 border-white/60 mb-4"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+          />
+          <h2 className="text-4xl font-extrabold text-gradient mb-1">Welcome to Sahay</h2>
+          <p className="text-gray-500 font-semibold text-sm">Civic Administration Platform</p>
+        </div>
         <p className="text-gray-600 mb-8 font-medium relative z-10">Select your role to access the dashboard</p>
         
         <div className="space-y-4 relative z-10">
@@ -95,9 +104,14 @@ const App = () => {
     <div className="flex flex-col min-h-screen">
       <header className="glass sticky top-0 z-50 p-4 flex justify-between items-center rounded-b-3xl mb-8 mx-4 mt-2 shadow-sm animate-slide-up">
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-orange to-brand-blue flex items-center justify-center shadow-lg">
-            <span className="text-white font-black text-xl">S</span>
-          </div>
+          <img
+            src="/sahay-logo.jpg"
+            alt="Sahay"
+            className="w-12 h-12 rounded-xl object-cover shadow-lg border-2 border-white/60"
+            onError={(e) => {
+              (e.target as HTMLImageElement).style.display = 'none';
+            }}
+          />
           <h1 className="text-2xl font-black text-gradient tracking-tight">
             Sahay
           </h1>

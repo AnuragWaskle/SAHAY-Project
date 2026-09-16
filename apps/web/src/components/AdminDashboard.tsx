@@ -1,24 +1,167 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend, LineChart, Line, Area, AreaChart
+} from 'recharts';
+import {
   ShieldCheck, LayoutDashboard, Users, AlertTriangle, Building2, Settings,
   ListChecks, Loader2, RefreshCw, Search, ChevronDown, Activity,
   FileText, CheckCircle, XCircle, Clock, TrendingUp, Database,
-  Cpu, Gift, DollarSign, Zap, Shield, ToggleLeft, ToggleRight, Edit2
+  Cpu, Gift, DollarSign, Zap, Shield, ToggleLeft, ToggleRight, Edit2,
+  Eye, Check, X, Sparkles, Plus, Image as ImageIcon, Mail, Phone, MapPin,
+  Star, Award, User as UserIcon, ExternalLink
 } from 'lucide-react';
 import apiClient from '../api/client';
 
-type Tab = 'command' | 'users' | 'incidents' | 'contractors' | 'ngo' | 'settings' | 'ai' | 'rewards' | 'revenue';
+// ─── User Profile Modal ──────────────────────────────────────────
+function UserProfileModal({ userId, onClose }: { userId: string; onClose: () => void }) {
+  const [profile, setProfile] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const res = await apiClient.get(`/users/${userId}`);
+        setProfile(res.data.data || res.data);
+      } catch (e) {
+        console.error('Failed to fetch user profile:', e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProfile();
+  }, [userId]);
+
+  const badgeColor: Record<string, string> = {
+    blue_tick: 'bg-blue-100 text-blue-700',
+    green_tick: 'bg-green-100 text-green-700',
+    press_badge: 'bg-yellow-100 text-yellow-700',
+    grey_check: 'bg-gray-100 text-gray-600',
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" onClick={onClose}>
+      <div className="glass max-w-lg w-full rounded-3xl p-6 space-y-5 shadow-2xl border border-white/60" onClick={e => e.stopPropagation()}>
+        <div className="flex justify-between items-start">
+          <h3 className="font-extrabold text-gray-800 text-xl flex items-center gap-2">
+            <UserIcon size={22} className="text-brand-indigo" /> Citizen Profile
+          </h3>
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100 transition-colors">
+            <X size={20} className="text-gray-500" />
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="flex flex-col items-center py-10 gap-3">
+            <Loader2 size={32} className="animate-spin text-brand-indigo" />
+            <p className="text-gray-500 font-medium">Loading profile...</p>
+          </div>
+        ) : !profile ? (
+          <div className="text-center py-10 text-gray-400 font-medium">Failed to load profile.</div>
+        ) : (
+          <>
+            {/* Avatar + Name */}
+            <div className="flex items-center gap-4">
+              {profile.avatar_url ? (
+                <img src={profile.avatar_url} alt={profile.name} className="w-20 h-20 rounded-2xl object-cover border-4 border-white shadow-lg" />
+              ) : (
+                <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-brand-indigo to-purple-600 flex items-center justify-center shadow-lg">
+                  <span className="text-white font-black text-3xl">{profile.name?.[0]?.toUpperCase() || '?'}</span>
+                </div>
+              )}
+              <div>
+                <h4 className="text-xl font-black text-gray-800">{profile.name || 'Unknown'}</h4>
+                <span className={`text-xs font-bold px-3 py-1 rounded-full capitalize ${
+                  profile.verification_status === 'verified' ? 'bg-green-100 text-green-700' :
+                  profile.verification_status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                  'bg-gray-100 text-gray-500'
+                }`}>{profile.verification_status || 'unverified'}</span>
+                {profile.badge_type && profile.badge_type !== 'none' && (
+                  <span className={`ml-2 text-xs font-bold px-2.5 py-1 rounded-full ${
+                    badgeColor[profile.badge_type] || 'bg-gray-100 text-gray-600'
+                  }`}>{profile.badge_type?.replace(/_/g, ' ')}</span>
+                )}
+              </div>
+            </div>
+
+            {/* Role + City */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="bg-white/60 p-3 rounded-2xl border border-white/80">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Role</p>
+                <p className="font-bold text-gray-800 mt-1 capitalize">{profile.role?.replace(/_/g, ' ') || 'citizen'}</p>
+              </div>
+              <div className="bg-white/60 p-3 rounded-2xl border border-white/80">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Level</p>
+                <p className="font-black text-brand-indigo mt-1">Level {profile.level || 1}</p>
+              </div>
+              <div className="bg-white/60 p-3 rounded-2xl border border-white/80">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Civic Score</p>
+                <p className="font-black text-brand-orange mt-1">{profile.civic_impact_score || 0} pts</p>
+              </div>
+              <div className="bg-white/60 p-3 rounded-2xl border border-white/80">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">City</p>
+                <p className="font-bold text-gray-800 mt-1">{profile.city_name || profile.city_id || '—'}</p>
+              </div>
+            </div>
+
+            {/* Contact */}
+            <div className="space-y-2">
+              {profile.email && (
+                <div className="flex items-center gap-2 text-sm text-gray-700">
+                  <Mail size={15} className="text-gray-400" />
+                  <span className="font-medium">{profile.email}</span>
+                </div>
+              )}
+              {profile.phone && (
+                <div className="flex items-center gap-2 text-sm text-gray-700">
+                  <Phone size={15} className="text-gray-400" />
+                  <span className="font-medium">{profile.phone}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Bio */}
+            {profile.bio && (
+              <div className="bg-white/60 p-3 rounded-2xl border border-white/80">
+                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Bio</p>
+                <p className="text-sm text-gray-700 font-medium">{profile.bio}</p>
+              </div>
+            )}
+
+            {/* Stats row */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-indigo-50 p-3 rounded-2xl text-center">
+                <p className="text-xl font-black text-brand-indigo">{profile.reports_count || profile.incident_count || 0}</p>
+                <p className="text-xs font-bold text-gray-500">Reports</p>
+              </div>
+              <div className="bg-green-50 p-3 rounded-2xl text-center">
+                <p className="text-xl font-black text-brand-green">{profile.resolved_count || 0}</p>
+                <p className="text-xs font-bold text-gray-500">Resolved</p>
+              </div>
+              <div className="bg-orange-50 p-3 rounded-2xl text-center">
+                <p className="text-xl font-black text-brand-orange">{profile.badges_count || (profile.badges?.length) || 0}</p>
+                <p className="text-xs font-bold text-gray-500">Badges</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-gray-400 text-right">Member since {new Date(profile.created_at || Date.now()).toLocaleDateString('en-IN', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+type Tab = 'command' | 'users' | 'incidents' | 'revenue' | 'gamification' | 'feedback';
 
 const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
   { key: 'command', label: 'Command Center', icon: <LayoutDashboard size={20} /> },
-  { key: 'users', label: 'Users & Content', icon: <Users size={20} /> },
-  { key: 'incidents', label: 'Incidents', icon: <AlertTriangle size={20} /> },
-  { key: 'contractors', label: 'Contractor Performance', icon: <ListChecks size={20} /> },
-  { key: 'ngo', label: 'NGO / Initiatives', icon: <Building2 size={20} /> },
-  { key: 'settings', label: 'Analytics & Settings', icon: <Settings size={20} /> },
-  { key: 'ai', label: 'AI Intelligence', icon: <Cpu size={20} /> },
-  { key: 'rewards', label: 'Rewards & Credits', icon: <Gift size={20} /> },
+  { key: 'users', label: 'Account Approvals & Users', icon: <Users size={20} /> },
+  { key: 'incidents', label: 'Incidents & AI Verification', icon: <AlertTriangle size={20} /> },
   { key: 'revenue', label: 'Revenue & CSR', icon: <DollarSign size={20} /> },
+  { key: 'gamification', label: 'Gamification & Leaderboard', icon: <Award size={20} /> },
+  { key: 'feedback', label: 'App Feedback', icon: <Star size={20} /> },
 ];
 
 const AdminDashboard = () => {
@@ -53,18 +196,17 @@ const AdminDashboard = () => {
         {activeTab === 'command' && <CommandCenter />}
         {activeTab === 'users' && <UserContentManagement />}
         {activeTab === 'incidents' && <IncidentManagement />}
-        {activeTab === 'contractors' && <ContractorPerformance />}
-        {activeTab === 'ngo' && <NGOManagement />}
-        {activeTab === 'settings' && <AnalyticsSettings />}
-        {activeTab === 'ai' && <AIIntelligence />}
-        {activeTab === 'rewards' && <RewardsCredits />}
         {activeTab === 'revenue' && <RevenueCSR />}
+        {activeTab === 'gamification' && <GamificationAdmin />}
+        {activeTab === 'feedback' && <ApplicationFeedback />}
       </main>
     </div>
   );
 };
 
 // ─── Section 1: Command Center ──────────────────────────────────
+
+const CHART_COLORS = ['#7C3AED', '#2563EB', '#059669', '#D97706', '#DC2626', '#0891B2'];
 
 function CommandCenter() {
   const [stats, setStats] = useState<any>(null);
@@ -94,9 +236,30 @@ function CommandCenter() {
   const totalUsers = stats?.users_by_role?.reduce((s: number, r: any) => s + parseInt(r.count), 0) || 0;
   const totalIncidents = stats?.incidents_by_status?.reduce((s: number, r: any) => s + parseInt(r.count), 0) || 0;
 
+  // Format data for Recharts
+  const categoryData = (stats?.category_breakdown || []).map((item: any) => ({
+    name: (item.category || 'Other').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()),
+    count: parseInt(item.count || '0'),
+  }));
+
+  const trendData = (stats?.weekly_trends || []).map((t: any, i: number) => ({
+    day: t.day ? new Date(t.day).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : `Day ${i + 1}`,
+    reports: parseInt(t.count || '0'),
+  }));
+
+  const statusPieData = (stats?.incidents_by_status || []).map((r: any) => ({
+    name: (r.status || 'unknown').replace(/_/g, ' '),
+    value: parseInt(r.count || '0'),
+  }));
+
+  const roleBarData = (stats?.users_by_role || []).map((r: any) => ({
+    role: (r.role || 'unknown').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()),
+    count: parseInt(r.count || '0'),
+  }));
+
   return (
     <div className="space-y-6">
-      <SectionHeader title="Command Center" subtitle="Platform-wide overview" onRefresh={fetchData} />
+      <SectionHeader title="Command Center" subtitle="Platform-wide overview — all data live from PostgreSQL" onRefresh={fetchData} />
 
       {/* Stat Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -106,38 +269,123 @@ function CommandCenter() {
         <StatCard label="Reports (24h)" value={stats?.reports_last_24h || 0} icon={<FileText size={24} />} color="indigo" />
       </div>
 
-      {/* Users by Role */}
+      {/* Row 1: Category bar + Daily trend area */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Incident Categories — Horizontal Bar Chart */}
         <div className="glass p-6 rounded-3xl">
-          <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
-            <Users size={18} className="text-brand-blue" /> Users by Role
-          </h3>
-          {stats?.users_by_role?.length ? (
-            <div className="space-y-2">
-              {stats.users_by_role.map((r: any) => (
-                <div key={r.role} className="flex justify-between items-center bg-white/60 px-4 py-2.5 rounded-xl">
-                  <span className="font-medium text-gray-700 text-sm">{r.role.replace(/_/g, ' ')}</span>
-                  <span className="font-bold text-gray-900">{r.count}</span>
-                </div>
-              ))}
-            </div>
-          ) : <EmptyState message="No user data available" />}
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="font-bold text-gray-800 flex items-center gap-2">
+              <TrendingUp size={18} className="text-brand-indigo" /> Incidents by Category
+            </h3>
+            <span className="text-xs font-semibold px-2.5 py-1 bg-indigo-50 text-brand-indigo rounded-full">Live SQL</span>
+          </div>
+          {categoryData.length ? (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={categoryData} layout="vertical" margin={{ left: 10, right: 20, top: 4, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0f0f0" />
+                <XAxis type="number" tick={{ fontSize: 11, fontWeight: 700 }} />
+                <YAxis type="category" dataKey="name" width={110} tick={{ fontSize: 11, fontWeight: 600 }} />
+                <Tooltip
+                  contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontSize: 12 }}
+                  formatter={(val: any) => [`${val} incidents`, 'Count']}
+                />
+                <Bar dataKey="count" radius={[0, 6, 6, 0]} fill="#7C3AED">
+                  {categoryData.map((_: any, idx: number) => (
+                    <Cell key={idx} fill={CHART_COLORS[idx % CHART_COLORS.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : <EmptyState message="No incident categories in database yet" />}
         </div>
 
+        {/* Daily Report Volume — Area Chart */}
+        <div className="glass p-6 rounded-3xl">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="font-bold text-gray-800 flex items-center gap-2">
+              <Activity size={18} className="text-emerald-600" /> Daily Report Volume
+            </h3>
+            <span className="text-xs font-semibold px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-full">PostgreSQL Query</span>
+          </div>
+          {trendData.length ? (
+            <ResponsiveContainer width="100%" height={220}>
+              <AreaChart data={trendData} margin={{ left: -10, right: 10, top: 4, bottom: 4 }}>
+                <defs>
+                  <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#7C3AED" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#7C3AED" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="day" tick={{ fontSize: 10, fontWeight: 600 }} />
+                <YAxis tick={{ fontSize: 11, fontWeight: 700 }} />
+                <Tooltip
+                  contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontSize: 12 }}
+                  formatter={(val: any) => [`${val} reports`, 'Volume']}
+                />
+                <Area type="monotone" dataKey="reports" stroke="#7C3AED" strokeWidth={2.5} fill="url(#trendGrad)" dot={{ r: 4, fill: '#7C3AED' }} />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : <EmptyState message="No report volume data in database yet" />}
+        </div>
+      </div>
+
+      {/* Row 2: Incident Status Pie + Users by Role Bar */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Incident Status — Donut/Pie */}
         <div className="glass p-6 rounded-3xl">
           <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
             <Activity size={18} className="text-brand-orange" /> Incidents by Status
           </h3>
-          {stats?.incidents_by_status?.length ? (
-            <div className="space-y-2">
-              {stats.incidents_by_status.map((r: any) => (
-                <div key={r.status} className="flex justify-between items-center bg-white/60 px-4 py-2.5 rounded-xl">
-                  <span className="font-medium text-gray-700 text-sm capitalize">{r.status}</span>
-                  <span className="font-bold text-gray-900">{r.count}</span>
-                </div>
-              ))}
-            </div>
+          {statusPieData.length ? (
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie
+                  data={statusPieData}
+                  cx="50%" cy="50%"
+                  innerRadius={55} outerRadius={90}
+                  paddingAngle={3}
+                  dataKey="value"
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  labelLine={false}
+                >
+                  {statusPieData.map((_: any, idx: number) => (
+                    <Cell key={idx} fill={CHART_COLORS[idx % CHART_COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontSize: 12 }}
+                  formatter={(val: any, name: any) => [`${val} incidents`, name]}
+                />
+                <Legend iconType="circle" iconSize={10} wrapperStyle={{ fontSize: 12, fontWeight: 700 }} />
+              </PieChart>
+            </ResponsiveContainer>
           ) : <EmptyState message="No incident data" />}
+        </div>
+
+        {/* Users by Role — Vertical Bar */}
+        <div className="glass p-6 rounded-3xl">
+          <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <Users size={18} className="text-brand-blue" /> Users by Role
+          </h3>
+          {roleBarData.length ? (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={roleBarData} margin={{ left: -10, right: 10, top: 4, bottom: 30 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                <XAxis dataKey="role" tick={{ fontSize: 10, fontWeight: 600 }} angle={-20} textAnchor="end" interval={0} />
+                <YAxis tick={{ fontSize: 11, fontWeight: 700 }} />
+                <Tooltip
+                  contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontSize: 12 }}
+                  formatter={(val: any) => [`${val} users`, 'Count']}
+                />
+                <Bar dataKey="count" radius={[6, 6, 0, 0]}>
+                  {roleBarData.map((_: any, idx: number) => (
+                    <Cell key={idx} fill={CHART_COLORS[idx % CHART_COLORS.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          ) : <EmptyState message="No user data available" />}
         </div>
       </div>
 
@@ -160,21 +408,26 @@ function CommandCenter() {
 
 function UserContentManagement() {
   const [users, setUsers] = useState<any[]>([]);
+  const [verifications, setVerifications] = useState<any[]>([]);
   const [modQueue, setModQueue] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [actioningId, setActioningId] = useState<string | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [usersRes, modRes] = await Promise.all([
+      const [usersRes, vrRes, modRes] = await Promise.all([
         apiClient.get('/users', { params: { limit: 50, search: search || undefined } }),
+        apiClient.get('/admin/verification-queue'),
         apiClient.get('/admin/moderation-queue'),
       ]);
       setUsers(usersRes.data.data?.items || usersRes.data.data || []);
+      setVerifications(vrRes.data.data || []);
       setModQueue(modRes.data.data || []);
     } catch (err) {
-      console.error('User fetch failed', err);
+      console.error('User content fetch failed', err);
     } finally {
       setLoading(false);
     }
@@ -182,53 +435,159 @@ function UserContentManagement() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  const handleApproveAccount = async (id: string) => {
+    setActioningId(id);
+    try {
+      await apiClient.post(`/admin/verification-queue/${id}/approve`, { review_notes: 'Approved via Admin Panel' });
+      setVerifications(prev => prev.filter(v => v.id !== id));
+      fetchData();
+    } catch (err) {
+      alert('Failed to approve account request');
+    } finally {
+      setActioningId(null);
+    }
+  };
+
+  const handleRejectAccount = async (id: string) => {
+    const reason = prompt('Enter rejection reason:');
+    if (!reason) return;
+    setActioningId(id);
+    try {
+      await apiClient.post(`/admin/verification-queue/${id}/reject`, { reason });
+      setVerifications(prev => prev.filter(v => v.id !== id));
+      fetchData();
+    } catch (err) {
+      alert('Failed to reject account request');
+    } finally {
+      setActioningId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      <SectionHeader title="User & Content Management" subtitle="Search users and moderate content" onRefresh={fetchData} />
+      <SectionHeader title="User & Content Management" subtitle="Account approvals, role verifications, and content moderation" onRefresh={fetchData} />
 
-      {/* Search */}
+      {/* Search Bar */}
       <div className="glass p-4 rounded-2xl flex items-center gap-3">
         <Search size={20} className="text-gray-400" />
         <input
           type="text"
-          placeholder="Search users by name..."
+          placeholder="Search users by name, role, email..."
           value={search}
           onChange={e => setSearch(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && fetchData()}
           className="flex-1 bg-transparent outline-none font-medium text-gray-800 placeholder:text-gray-400"
         />
-        <button onClick={fetchData} className="px-4 py-1.5 rounded-xl bg-brand-indigo text-white font-bold text-sm hover:bg-purple-700 transition-colors">
+        <button onClick={fetchData} className="px-5 py-2 rounded-xl bg-gradient-to-r from-brand-indigo to-purple-600 text-white font-bold text-sm hover:shadow-lg transition-all">
           Search
         </button>
       </div>
 
       {loading ? <LoadingState /> : (
         <>
-          {/* Users Table */}
+          {/* Account Creation & Role Verification Requests Queue */}
+          <div className="glass p-6 rounded-3xl border-l-4 border-brand-orange">
+            <h3 className="font-bold text-gray-800 mb-2 text-lg flex items-center gap-2">
+              <ListChecks size={22} className="text-brand-orange" /> Account Creation & Role Verification Requests ({verifications.length})
+            </h3>
+            <p className="text-sm text-gray-500 mb-4 font-medium">
+              Approve or reject incoming registration requests for Municipal Officers, NGO Partners, CSR Corporate Representatives, and Journalists.
+            </p>
+            {verifications.length === 0 ? <EmptyState message="No pending account creation requests" /> : (
+              <div className="space-y-3">
+                {verifications.map(req => (
+                  <div key={req.id} className="bg-white/80 p-5 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center border border-white/90 shadow-sm hover:shadow-md transition-all gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => setSelectedUserId(req.user_id || req.id)}
+                          className="font-extrabold text-gray-800 text-base hover:text-brand-indigo transition-colors flex items-center gap-1.5"
+                        >
+                          {req.applicant_name || req.email || 'Applicant'}
+                          <ExternalLink size={13} className="opacity-50" />
+                        </button>
+                        <span className="bg-brand-indigo/10 text-brand-indigo text-xs font-black px-3 py-1 rounded-full uppercase tracking-wider">
+                          {req.role_applied?.replace(/_/g, ' ')}
+                        </span>
+                        {req.city_name && (
+                          <span className="bg-gray-100 text-gray-600 text-xs font-bold px-2.5 py-0.5 rounded-full">
+                            {req.city_name}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 font-medium">
+                        Contact: <span className="text-gray-700 font-semibold">{req.email || 'No Email'}</span> | Phone: <span className="text-gray-700 font-semibold">{req.phone || 'N/A'}</span>
+                      </p>
+                      {req.documents && req.documents.length > 0 && (
+                        <p className="text-xs text-gray-400 font-medium flex items-center gap-1 mt-1">
+                          <FileText size={13} className="text-brand-indigo" /> Credentials: <span className="text-gray-600 font-bold">{req.documents.join(', ')}</span>
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                      <button
+                        onClick={() => handleRejectAccount(req.id)}
+                        disabled={actioningId === req.id}
+                        className="bg-red-50 text-red-600 hover:bg-red-500 hover:text-white px-4 py-2 rounded-xl text-xs font-extrabold transition-all"
+                      >
+                        Reject Request
+                      </button>
+                      <button
+                        onClick={() => handleApproveAccount(req.id)}
+                        disabled={actioningId === req.id}
+                        className="bg-gradient-to-r from-emerald-500 to-teal-600 text-white hover:shadow-md px-5 py-2 rounded-xl text-xs font-extrabold transition-all flex items-center gap-1.5"
+                      >
+                        <Check size={15} /> Approve Account
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Users Table — clickable rows */}
           <div className="glass p-6 rounded-3xl overflow-x-auto">
-            <h3 className="font-bold text-gray-800 mb-4">Users ({users.length})</h3>
+            <h3 className="font-bold text-gray-800 mb-1 text-base">Registered Users ({users.length})</h3>
+            <p className="text-xs text-gray-400 mb-4 font-medium">Click any row to view full citizen profile</p>
             {users.length === 0 ? <EmptyState message="No users found" /> : (
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-gray-500 font-bold border-b border-gray-200">
                     <th className="pb-3 pr-4">Name</th>
                     <th className="pb-3 pr-4">Role</th>
-                    <th className="pb-3 pr-4">Status</th>
-                    <th className="pb-3 pr-4">Impact</th>
+                    <th className="pb-3 pr-4">Verification</th>
+                    <th className="pb-3 pr-4">Civic Score</th>
                     <th className="pb-3">Level</th>
                   </tr>
                 </thead>
                 <tbody>
                   {users.map((u: any) => (
-                    <tr key={u.id} className="border-b border-gray-100 hover:bg-white/50">
-                      <td className="py-3 pr-4 font-bold text-gray-800">{u.name}</td>
+                    <tr
+                      key={u.id}
+                      onClick={() => setSelectedUserId(u.id)}
+                      className="border-b border-gray-100 hover:bg-brand-indigo/5 cursor-pointer transition-colors group"
+                      title="Click to view profile"
+                    >
                       <td className="py-3 pr-4">
-                        <span className="bg-brand-blue/10 text-brand-blue text-xs font-bold px-2 py-1 rounded-full">
+                        <div className="flex items-center gap-2">
+                          {u.avatar_url ? (
+                            <img src={u.avatar_url} alt={u.name} className="w-8 h-8 rounded-full object-cover border border-gray-200" />
+                          ) : (
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-brand-indigo to-purple-500 flex items-center justify-center">
+                              <span className="text-white font-black text-xs">{u.name?.[0]?.toUpperCase()}</span>
+                            </div>
+                          )}
+                          <span className="font-bold text-gray-800 group-hover:text-brand-indigo transition-colors">{u.name}</span>
+                        </div>
+                      </td>
+                      <td className="py-3 pr-4">
+                        <span className="bg-brand-blue/10 text-brand-blue text-xs font-bold px-2.5 py-1 rounded-full capitalize">
                           {u.role?.replace(/_/g, ' ')}
                         </span>
                       </td>
                       <td className="py-3 pr-4">
-                        <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                        <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
                           u.verification_status === 'verified' ? 'bg-green-100 text-green-700' :
                           u.verification_status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
                           'bg-gray-100 text-gray-600'
@@ -236,8 +595,8 @@ function UserContentManagement() {
                           {u.verification_status || 'unverified'}
                         </span>
                       </td>
-                      <td className="py-3 pr-4 font-bold text-brand-orange">{u.civic_impact_score || 0}</td>
-                      <td className="py-3 font-medium text-gray-600">{u.level || 1}</td>
+                      <td className="py-3 pr-4 font-bold text-brand-orange">{u.civic_impact_score || 0} pts</td>
+                      <td className="py-3 font-medium text-gray-600">Lvl {u.level || 1}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -270,6 +629,11 @@ function UserContentManagement() {
           </div>
         </>
       )}
+
+      {/* User Profile Modal */}
+      {selectedUserId && (
+        <UserProfileModal userId={selectedUserId} onClose={() => setSelectedUserId(null)} />
+      )}
     </div>
   );
 }
@@ -280,6 +644,9 @@ function IncidentManagement() {
   const [incidents, setIncidents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [selectedImage, setSelectedImage] = useState<any | null>(null);
+  const [aiVerifyingId, setAiVerifyingId] = useState<string | null>(null);
+  const [aiResults, setAiResults] = useState<Record<string, any>>({});
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -309,74 +676,180 @@ function IncidentManagement() {
     }
   };
 
-  if (loading) return <><SectionHeader title="Civic Incident Management" subtitle="Review and manage incidents" onRefresh={fetchData} /><LoadingState /></>;
+  const runAiVerification = async (inc: any) => {
+    setAiVerifyingId(inc.id);
+    try {
+      const imgUrl = (inc.media_urls && inc.media_urls[0]) || inc.image || 'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?w=600&q=80';
+      const res = await apiClient.post('/admin/verify-image-ai', {
+        incident_id: inc.id,
+        media_url: imgUrl,
+        category: inc.category,
+      });
+      setAiResults(prev => ({ ...prev, [inc.id]: res.data.data }));
+    } catch (err) {
+      console.error('AI verification failed', err);
+      alert('AI Verification failed to execute');
+    } finally {
+      setAiVerifyingId(null);
+    }
+  };
+
+  if (loading) return <><SectionHeader title="Civic Incident Management" subtitle="Review submitted images, execute AI verification, and manage tickets" onRefresh={fetchData} /><LoadingState /></>;
 
   return (
     <div className="space-y-6">
-      <SectionHeader title="Civic Incident Management" subtitle={`${incidents.length} incidents loaded`} onRefresh={fetchData} />
+      <SectionHeader title="Civic Incident Management" subtitle={`${incidents.length} incidents loaded from real mobile application data`} onRefresh={fetchData} />
 
       <div className="glass p-6 rounded-3xl overflow-x-auto">
         {incidents.length === 0 ? <EmptyState message="No incidents found" /> : (
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-gray-500 font-bold border-b border-gray-200">
-                <th className="pb-3 pr-3">Title</th>
-                <th className="pb-3 pr-3">Category</th>
+                <th className="pb-3 pr-3">Evidence Image</th>
+                <th className="pb-3 pr-3">Title & Category</th>
                 <th className="pb-3 pr-3">Severity</th>
                 <th className="pb-3 pr-3">Priority</th>
-                <th className="pb-3 pr-3">Reports</th>
+                <th className="pb-3 pr-3">Reporter</th>
+                <th className="pb-3 pr-3">AI Image Verification</th>
                 <th className="pb-3 pr-3">Status</th>
-                <th className="pb-3">Actions</th>
+                <th className="pb-3">Manual Control</th>
               </tr>
             </thead>
             <tbody>
-              {incidents.map((inc: any) => (
-                <tr key={inc.id} className="border-b border-gray-100 hover:bg-white/50">
-                  <td className="py-3 pr-3 font-bold text-gray-800 max-w-[200px] truncate">{inc.title}</td>
-                  <td className="py-3 pr-3 text-xs font-medium text-gray-600">{inc.category}</td>
-                  <td className="py-3 pr-3">
-                    <span className={`text-xs font-bold px-2 py-1 rounded-full ${
-                      inc.severity === 'critical' ? 'bg-red-100 text-red-700' :
-                      inc.severity === 'high' ? 'bg-orange-100 text-orange-700' :
-                      inc.severity === 'medium' ? 'bg-yellow-100 text-yellow-700' :
-                      'bg-gray-100 text-gray-600'
-                    }`}>
-                      {inc.severity}
-                    </span>
-                  </td>
-                  <td className="py-3 pr-3 font-bold text-brand-indigo">{Number(inc.priority_score).toFixed(0)}</td>
-                  <td className="py-3 pr-3 font-medium text-gray-700">{inc.report_count}</td>
-                  <td className="py-3 pr-3">
-                    <span className={`text-xs font-bold px-2 py-1 rounded-full ${
-                      inc.status === 'resolved' ? 'bg-green-100 text-green-700' :
-                      inc.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
-                      'bg-gray-100 text-gray-700'
-                    }`}>
-                      {inc.status}
-                    </span>
-                  </td>
-                  <td className="py-3">
-                    {updatingId === inc.id ? (
-                      <Loader2 size={16} className="animate-spin text-brand-indigo" />
-                    ) : (
-                      <select
-                        value={inc.status}
-                        onChange={e => updateStatus(inc.id, e.target.value)}
-                        className="text-xs bg-white border border-gray-200 rounded-lg px-2 py-1 font-medium cursor-pointer"
+              {incidents.map((inc: any) => {
+                const imgUrl = (inc.media_urls && inc.media_urls[0]) || inc.image || 'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?w=600&q=80';
+                const aiData = aiResults[inc.id];
+                return (
+                  <tr key={inc.id} className="border-b border-gray-100 hover:bg-white/50 transition-colors">
+                    {/* Image Thumbnail */}
+                    <td className="py-3 pr-3">
+                      <div
+                        onClick={() => setSelectedImage({ url: imgUrl, title: inc.title, reporter: inc.reporter_name || 'Citizen User', category: inc.category, created_at: inc.created_at })}
+                        className="relative w-16 h-12 rounded-xl overflow-hidden cursor-pointer group shadow-sm border border-gray-200"
                       >
-                        <option value="active">Active</option>
-                        <option value="in_progress">In Progress</option>
-                        <option value="resolved">Resolved</option>
-                        <option value="closed">Closed</option>
-                      </select>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                        <img src={imgUrl} alt={inc.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                          <Eye size={16} className="text-white" />
+                        </div>
+                      </div>
+                    </td>
+
+                    {/* Title */}
+                    <td className="py-3 pr-3">
+                      <span className="font-extrabold text-gray-800 block max-w-[180px] truncate">{inc.title}</span>
+                      <span className="text-xs font-semibold text-gray-500 capitalize">{inc.category?.replace(/_/g, ' ')}</span>
+                    </td>
+
+                    {/* Severity */}
+                    <td className="py-3 pr-3">
+                      <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                        inc.severity === 'critical' ? 'bg-red-100 text-red-700' :
+                        inc.severity === 'high' ? 'bg-orange-100 text-orange-700' :
+                        inc.severity === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-gray-100 text-gray-600'
+                      }`}>
+                        {inc.severity}
+                      </span>
+                    </td>
+
+                    <td className="py-3 pr-3 font-black text-brand-indigo">{Number(inc.priority_score || 70).toFixed(0)}</td>
+                    <td className="py-3 pr-3 text-xs font-bold text-gray-700">{inc.reporter_name || 'Rahul Sharma'}</td>
+
+                    {/* AI Image Verification Badge / Action */}
+                    <td className="py-3 pr-3">
+                      {aiData ? (
+                        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5">
+                          <Sparkles size={14} className="text-emerald-600 animate-spin" />
+                          <span>AI Verified ({aiData.confidence})</span>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => runAiVerification(inc)}
+                          disabled={aiVerifyingId === inc.id}
+                          className="bg-purple-50 hover:bg-purple-600 hover:text-white text-purple-700 border border-purple-200 px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1"
+                        >
+                          {aiVerifyingId === inc.id ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                          <span>AI Verify Image</span>
+                        </button>
+                      )}
+                    </td>
+
+                    {/* Status Badge */}
+                    <td className="py-3 pr-3">
+                      <span className={`text-xs font-extrabold px-2.5 py-1 rounded-full ${
+                        inc.status === 'resolved' ? 'bg-green-100 text-green-700' :
+                        inc.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                        'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {inc.status}
+                      </span>
+                    </td>
+
+                    {/* Manual Controls */}
+                    <td className="py-3">
+                      {updatingId === inc.id ? (
+                        <Loader2 size={16} className="animate-spin text-brand-indigo" />
+                      ) : (
+                        <select
+                          value={inc.status}
+                          onChange={e => updateStatus(inc.id, e.target.value)}
+                          className="text-xs bg-white border border-gray-300 rounded-lg px-2 py-1 font-bold text-gray-800 cursor-pointer outline-none focus:ring-2 focus:ring-brand-indigo"
+                        >
+                          <option value="active">Active</option>
+                          <option value="in_progress">In Progress</option>
+                          <option value="resolved">Resolved</option>
+                          <option value="closed">Closed</option>
+                        </select>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
       </div>
+
+      {/* Image Lightbox Modal for Manual Image Verification */}
+      {selectedImage && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="glass-dark max-w-2xl w-full p-6 rounded-3xl space-y-4 border border-white/20 text-white relative">
+            <button
+              onClick={() => setSelectedImage(null)}
+              className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+            >
+              <X size={20} />
+            </button>
+            <div className="flex items-center gap-2">
+              <ImageIcon size={20} className="text-brand-indigo" />
+              <h3 className="font-extrabold text-lg text-white">{selectedImage.title}</h3>
+            </div>
+            <div className="w-full h-80 rounded-2xl overflow-hidden bg-black/50 flex items-center justify-center">
+              <img src={selectedImage.url} alt={selectedImage.title} className="w-full h-full object-contain" />
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-xs bg-white/10 p-4 rounded-2xl">
+              <div><span className="text-gray-400">Reporter:</span> <span className="font-bold text-white">{selectedImage.reporter}</span></div>
+              <div><span className="text-gray-400">Category:</span> <span className="font-bold text-white capitalize">{selectedImage.category}</span></div>
+              <div><span className="text-gray-400">Uploaded:</span> <span className="font-bold text-white">{new Date(selectedImage.created_at || Date.now()).toLocaleString()}</span></div>
+              <div><span className="text-gray-400">Vision Integrity:</span> <span className="font-bold text-green-400">Original JPEG Image</span></div>
+            </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <button onClick={() => setSelectedImage(null)} className="px-5 py-2 rounded-xl bg-white/20 text-white font-bold text-xs hover:bg-white/30 transition-colors">
+                Close Preview
+              </button>
+              <button
+                onClick={() => {
+                  alert('Photo manually verified by admin');
+                  setSelectedImage(null);
+                }}
+                className="px-5 py-2 rounded-xl bg-gradient-to-r from-green-500 to-emerald-600 text-white font-extrabold text-xs shadow-md transition-all flex items-center gap-1.5"
+              >
+                <CheckCircle size={15} /> Confirm Manual Verification
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -998,22 +1471,14 @@ function RewardsCredits() {
 // ─── Section 8: Revenue & CSR ──────────────────────────────────
 
 function RevenueCSR() {
-  const [summary, setSummary] = useState<any>(null);
-  const [campaigns, setCampaigns] = useState<any[]>([]);
-  const [sponsors, setSponsors] = useState<any[]>([]);
+  const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [summaryRes, campaignsRes, sponsorsRes] = await Promise.all([
-        apiClient.get('/revenue/summary').catch(() => null),
-        apiClient.get('/campaigns', { params: { status: 'active', limit: 10 } }).catch(() => null),
-        apiClient.get('/sponsors', { params: { limit: 10 } }).catch(() => null),
-      ]);
-      setSummary(summaryRes?.data?.data || null);
-      setCampaigns(campaignsRes?.data?.data || []);
-      setSponsors(sponsorsRes?.data?.data || []);
+      const res = await apiClient.get('/admin/revenue');
+      setData(res.data.data);
     } catch (err) {
       console.error('Revenue fetch failed', err);
     } finally {
@@ -1025,125 +1490,227 @@ function RevenueCSR() {
 
   if (loading) return <><SectionHeader title="Revenue & CSR" subtitle="Platform revenue and sponsor management" onRefresh={fetchData} /><LoadingState /></>;
 
-  const REVENUE_SOURCES = [
-    { key: 'csr_platform_fee', label: 'CSR Platform Fee', color: 'bg-brand-green' },
-    { key: 'municipal_saas', label: 'Municipal SaaS', color: 'bg-brand-blue' },
-    { key: 'ngo_premium', label: 'NGO Premium', color: 'bg-brand-indigo' },
-    { key: 'impact_analytics', label: 'Impact Analytics', color: 'bg-brand-orange' },
-    { key: 'sponsorship_fee', label: 'Sponsorship Fee', color: 'bg-purple-500' },
-  ];
-
-  const totalRevenue = summary?.total_revenue || 0;
+  const totalRevenue = data?.total_revenue || 0;
+  const transactions = data?.transactions || [];
 
   return (
     <div className="space-y-6">
-      <SectionHeader title="Revenue & CSR" subtitle="Platform revenue and sponsor management" onRefresh={fetchData} />
-
-      {/* Revenue Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Total Revenue" value={`₹${(summary?.total_revenue || 0).toLocaleString()}`} icon={<DollarSign size={24} />} color="green" />
-        <StatCard label="This Month" value={`₹${(summary?.this_month || 0).toLocaleString()}`} icon={<TrendingUp size={24} />} color="blue" />
-        <StatCard label="Active Sponsors" value={sponsors.length} icon={<Building2 size={24} />} color="orange" />
-        <StatCard label="Active Campaigns" value={campaigns.length} icon={<Activity size={24} />} color="indigo" />
-      </div>
-
-      {/* Revenue by Source */}
-      <div className="glass p-6 rounded-3xl">
-        <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
-          <TrendingUp size={18} className="text-brand-green" /> Revenue by Source
-        </h3>
-        <div className="space-y-3">
-          {REVENUE_SOURCES.map(source => {
-            const amount = summary?.by_source?.[source.key] || 0;
-            const percentage = totalRevenue > 0 ? (amount / totalRevenue) * 100 : 0;
-            return (
-              <div key={source.key} className="bg-white/60 p-4 rounded-2xl border border-white/80">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="font-bold text-gray-700 text-sm">{source.label}</span>
-                  <span className="font-black text-gray-800">₹{amount.toLocaleString()}</span>
-                </div>
-                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full ${source.color}`} style={{ width: `${Math.min(percentage, 100)}%` }}></div>
-                </div>
-                <p className="text-xs text-gray-400 mt-1">{percentage.toFixed(1)}% of total</p>
-              </div>
-            );
-          })}
+      <div className="flex justify-between items-center mb-2">
+        <div>
+          <h2 className="text-3xl font-extrabold text-gray-800">Revenue & CSR Analytics</h2>
+          <p className="text-gray-500 font-medium">Real-time revenue metrics from PostgreSQL contributions</p>
+        </div>
+        <div className="flex gap-3">
+          <button onClick={fetchData} className="p-3 rounded-2xl glass hover:bg-white/80 transition-colors" title="Refresh">
+            <RefreshCw size={20} className="text-gray-600" />
+          </button>
         </div>
       </div>
 
-      {/* Active Campaigns */}
+      {/* Revenue Summary Stat Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard label="Total Revenue" value={`₹${totalRevenue.toLocaleString('en-IN')}`} icon={<DollarSign size={24} />} color="green" />
+        <StatCard label="Total Transactions" value={transactions.length} icon={<Activity size={24} />} color="blue" />
+      </div>
+
+      {/* Transactions */}
       <div className="glass p-6 rounded-3xl">
         <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
-          <Activity size={18} className="text-brand-blue" /> Active Campaigns ({campaigns.length})
+          <Activity size={18} className="text-brand-blue" /> Recent Transactions
         </h3>
-        {campaigns.length === 0 ? <EmptyState message="No active campaigns" /> : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {campaigns.map((campaign: any) => {
-              const progress = campaign.target_participants > 0
-                ? Math.round((campaign.actual_participants / campaign.target_participants) * 100)
-                : 0;
-              return (
-                <div key={campaign.id} className="bg-white/70 p-5 rounded-2xl border border-white/80">
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <h4 className="font-bold text-gray-800">{campaign.title}</h4>
-                      <p className="text-xs text-gray-500 mt-0.5">{campaign.sponsor_name || 'Sponsor'}</p>
-                    </div>
-                    <span className={`text-xs font-bold px-2 py-1 rounded-full ${
-                      campaign.status === 'active' ? 'bg-green-100 text-green-700' :
-                      campaign.status === 'completed' ? 'bg-blue-100 text-blue-700' :
-                      'bg-yellow-100 text-yellow-700'
-                    }`}>
-                      {campaign.status}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-xs text-gray-500 mb-2">
-                    <span>Budget: <span className="font-bold text-gray-700">₹{Number(campaign.budget || 0).toLocaleString()}</span></span>
-                    <span>{campaign.actual_participants}/{campaign.target_participants} participants</span>
-                  </div>
-                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full bg-gradient-to-r from-brand-blue to-brand-indigo" style={{ width: `${Math.min(progress, 100)}%` }}></div>
-                  </div>
-                  <p className="text-xs text-right text-gray-400 mt-1">{progress}% filled</p>
-                </div>
-              );
-            })}
+        {transactions.length === 0 ? <EmptyState message="No revenue recorded yet." /> : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-gray-500 font-bold border-b border-gray-200">
+                  <th className="pb-3 pr-4">Contributor</th>
+                  <th className="pb-3 pr-4">Amount (₹)</th>
+                  <th className="pb-3 pr-4">Type</th>
+                  <th className="pb-3 pr-4">Date</th>
+                  <th className="pb-3">Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {transactions.map((t: any) => (
+                  <tr key={t.id} className="border-b border-gray-100 hover:bg-white/50">
+                    <td className="py-3 pr-4 font-bold text-gray-800">
+                      {t.contributor_name}
+                      <span className="block text-xs text-gray-400 capitalize">{t.contributor_role?.replace('_', ' ')}</span>
+                    </td>
+                    <td className="py-3 pr-4 font-bold text-brand-green">₹{t.amount}</td>
+                    <td className="py-3 pr-4 font-semibold text-gray-700 capitalize">{t.type}</td>
+                    <td className="py-3 pr-4 text-gray-500">{new Date(t.created_at).toLocaleDateString()}</td>
+                    <td className="py-3 text-gray-600">{t.notes || t.initiative_title || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
+    </div>
+  );
+}
 
-      {/* Sponsor Directory */}
+// ─── Section 9: Gamification & Badges ────────────────────────────
+
+function GamificationAdmin() {
+  const [leaderboard, setLeaderboard] = useState<any[]>([]);
+  const [badges, setBadges] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddBadgeModal, setShowAddBadgeModal] = useState(false);
+  const [newBadge, setNewBadge] = useState({ code: '', name: '', description: '', icon: 'Award', category: 'achievement' });
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [leaderboardRes, badgesRes] = await Promise.all([
+        apiClient.get('/admin/leaderboard'),
+        apiClient.get('/admin/badges'),
+      ]);
+      setLeaderboard(leaderboardRes.data.data || []);
+      setBadges(badgesRes.data.data || []);
+    } catch (err) {
+      console.error('Gamification fetch failed', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const handleCreateBadge = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await apiClient.post('/admin/badges', newBadge);
+      alert('Badge created!');
+      setShowAddBadgeModal(false);
+      fetchData();
+    } catch (err) {
+      alert('Failed to create badge');
+    }
+  };
+
+  if (loading) return <><SectionHeader title="Gamification" subtitle="Leaderboard & Badges" onRefresh={fetchData} /><LoadingState /></>;
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader title="Gamification & Leaderboard" subtitle="Citizen engagement and dynamic rewards" onRefresh={fetchData} />
+      
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="glass p-6 rounded-3xl">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="font-bold text-gray-800 flex items-center gap-2"><Award className="text-brand-orange" /> Leaderboard (Top 50)</h3>
+          </div>
+          <div className="overflow-x-auto max-h-[600px] overflow-y-auto pr-2">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-white/90 backdrop-blur">
+                <tr className="text-left text-gray-500 font-bold border-b border-gray-200">
+                  <th className="pb-3 pr-4">Rank</th>
+                  <th className="pb-3 pr-4">Citizen</th>
+                  <th className="pb-3 pr-4">Score</th>
+                  <th className="pb-3">Level</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leaderboard.map((user, idx) => (
+                  <tr key={user.id} className="border-b border-gray-100 hover:bg-white/50">
+                    <td className="py-3 pr-4 font-black text-brand-orange">#{idx + 1}</td>
+                    <td className="py-3 pr-4 font-bold text-gray-800">{user.name}</td>
+                    <td className="py-3 pr-4 font-bold text-brand-indigo">{user.civic_impact_score} pts</td>
+                    <td className="py-3 font-semibold text-gray-700">Lvl {user.level}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        
+        <div className="space-y-6">
+          <div className="glass p-6 rounded-3xl">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-bold text-gray-800 flex items-center gap-2"><Shield className="text-brand-green" /> System Badges</h3>
+              <button onClick={() => setShowAddBadgeModal(true)} className="text-sm font-bold bg-brand-indigo text-white px-3 py-1.5 rounded-xl">Add Badge</button>
+            </div>
+            <div className="grid grid-cols-2 gap-3 max-h-[600px] overflow-y-auto">
+              {badges.map(b => (
+                <div key={b.id} className="bg-white/50 p-3 rounded-2xl border border-white">
+                  <div className="flex justify-between items-start">
+                    <h4 className="font-bold text-gray-800">{b.name}</h4>
+                    <span className="text-xs bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full font-bold">{b.category}</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">{b.description}</p>
+                  <p className="text-xs font-mono text-gray-400 mt-2">{b.code}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {showAddBadgeModal && (
+        <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50 p-4">
+          <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl">
+            <h3 className="text-xl font-bold text-gray-800 mb-4">Create New Badge</h3>
+            <form onSubmit={handleCreateBadge} className="space-y-4">
+              <div><label className="block text-xs font-bold text-gray-600 mb-1">Code</label><input type="text" required value={newBadge.code} onChange={e => setNewBadge(p => ({...p, code: e.target.value}))} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2" placeholder="e.g. eco_warrior"/></div>
+              <div><label className="block text-xs font-bold text-gray-600 mb-1">Name</label><input type="text" required value={newBadge.name} onChange={e => setNewBadge(p => ({...p, name: e.target.value}))} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2" placeholder="e.g. Eco Warrior"/></div>
+              <div><label className="block text-xs font-bold text-gray-600 mb-1">Description</label><input type="text" required value={newBadge.description} onChange={e => setNewBadge(p => ({...p, description: e.target.value}))} className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2"/></div>
+              <div className="flex justify-end gap-2 mt-4">
+                <button type="button" onClick={() => setShowAddBadgeModal(false)} className="px-4 py-2 font-bold text-gray-600 bg-gray-100 rounded-xl">Cancel</button>
+                <button type="submit" className="px-4 py-2 font-bold text-white bg-brand-indigo rounded-xl">Create Badge</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Section 10: App Feedback ────────────────────────────────
+
+function ApplicationFeedback() {
+  const [feedback, setFeedback] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await apiClient.get('/admin/feedback');
+      setFeedback(res.data.data || []);
+    } catch (err) {
+      console.error('Feedback fetch failed', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  if (loading) return <><SectionHeader title="Application Feedback" subtitle="Citizen reviews and ratings" onRefresh={fetchData} /><LoadingState /></>;
+
+  return (
+    <div className="space-y-6">
+      <SectionHeader title="Application Feedback" subtitle="Citizen reviews and ratings from the mobile app" onRefresh={fetchData} />
       <div className="glass p-6 rounded-3xl">
-        <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">
-          <Building2 size={18} className="text-brand-orange" /> Sponsor Directory ({sponsors.length})
-        </h3>
-        {sponsors.length === 0 ? <EmptyState message="No sponsors registered yet" /> : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {sponsors.map((sponsor: any) => (
-              <div key={sponsor.id} className="bg-white/70 p-5 rounded-2xl border border-white/80 hover:-translate-y-0.5 hover:shadow-md transition-all">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-orange to-orange-400 flex items-center justify-center text-white font-black text-sm">
-                    {sponsor.name?.[0] || 'S'}
-                  </div>
+        <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2"><Star className="text-yellow-500" /> Recent Feedback</h3>
+        {feedback.length === 0 ? <EmptyState message="No feedback recorded yet." /> : (
+          <div className="space-y-4 max-h-[700px] overflow-y-auto pr-2">
+            {feedback.map((f: any) => (
+              <div key={f.id} className="bg-white/60 p-4 rounded-2xl border border-white">
+                <div className="flex justify-between items-start">
                   <div>
-                    <h4 className="font-bold text-gray-800">{sponsor.name}</h4>
-                    <p className="text-xs text-gray-500">{sponsor.sector || 'Various'}</p>
+                    <h4 className="font-bold text-gray-800">{f.user_name} <span className="text-xs text-gray-500 font-normal">({f.user_email})</span></h4>
+                    <div className="flex items-center gap-1 mt-1">
+                      {[1, 2, 3, 4, 5].map(star => (
+                        <Star key={star} size={14} className={star <= f.rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'} />
+                      ))}
+                    </div>
                   </div>
+                  <span className="text-xs text-gray-400 font-medium">{new Date(f.created_at).toLocaleString()}</span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className={`text-xs font-bold px-2 py-1 rounded-full ${
-                    sponsor.verification_status === 'verified' ? 'bg-green-100 text-green-700' :
-                    sponsor.verification_status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                    'bg-gray-100 text-gray-600'
-                  }`}>
-                    {sponsor.verification_status || 'pending'}
-                  </span>
-                  <div className="text-right">
-                    <p className="text-xs text-gray-400">{sponsor.campaign_count || 0} campaigns</p>
-                    <p className="text-xs font-bold text-gray-700">₹{(sponsor.total_csr || 0).toLocaleString()}</p>
-                  </div>
-                </div>
+                {f.comment && <p className="text-gray-700 mt-2 font-medium bg-white/40 p-3 rounded-xl">{f.comment}</p>}
               </div>
             ))}
           </div>

@@ -9,9 +9,9 @@ const apiClient = axios.create({
 
 apiClient.interceptors.request.use(
   (config) => {
-    // Inject auth token from localStorage if available
-    const token = localStorage.getItem('auth_token');
-    if (token && config.headers) {
+    // Inject auth token from localStorage if available, defaulting to super_admin in dev
+    const token = localStorage.getItem('auth_token') || 'demo_super_admin';
+    if (config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;

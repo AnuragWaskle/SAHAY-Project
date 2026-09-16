@@ -17,11 +17,13 @@ from openai import AsyncOpenAI
 from dotenv import load_dotenv
 import asyncpg
 
+from dinov2_engine import load_dinov2_model, run_dinov2_verification
+
 load_dotenv()
 
 app = FastAPI(
     title="Sahay AI Services",
-    description="8 AI engines for civic intelligence",
+    description="8 AI engines for civic intelligence + DINOv2 Evidence Verification",
     version="1.0.0"
 )
 
@@ -56,6 +58,9 @@ async def startup():
         print("✅ Database pool created")
     except Exception as e:
         print(f"⚠️  DB pool failed (AI services work without DB): {e}")
+
+    # Load DINOv2 Model once on startup
+    load_dinov2_model()
 
 @app.on_event("shutdown")
 async def shutdown():
@@ -482,6 +487,38 @@ Evidence images provided: {len(req.after_media_urls)}"""
         reasoning=data.get("reasoning", "Insufficient data to determine resolution status"),
         points_to_verify=data.get("points_to_verify", []),
     )
+
+# ─── ENGINE 5B: Local DINOv2 + OpenCV Evidence Verification ───
+
+class DINOv2VerificationRequest(BaseModel):
+    before_evidence_url: str
+    after_evidence_url: str
+    incident_lat: float = 23.259933
+    incident_lng: float = 77.412613
+    evidence_lat: Optional[float] = None
+    evidence_lng: Optional[float] = None
+    before_timestamp: Optional[float] = None
+    after_timestamp: Optional[float] = None
+    max_radius_meters: float = 50.0
+
+@app.post("/verification/analyze-dinov2")
+async def analyze_dinov2_evidence(req: DINOv2VerificationRequest):
+    """
+    Local DINOv2 + OpenCV + pHash + PostGIS Evidence Verification Endpoint
+    Calculates visual similarity, scene changes, duplicate hashes, GPS distance, and returns verification verdict.
+    """
+    result = run_dinov2_verification(
+        before_src=req.before_evidence_url,
+        after_src=req.after_evidence_url,
+        incident_lat=req.incident_lat,
+        incident_lng=req.incident_lng,
+        evidence_lat=req.evidence_lat,
+        evidence_lng=req.evidence_lng,
+        before_time=req.before_timestamp,
+        after_time=req.after_timestamp,
+        max_radius_m=req.max_radius_meters
+    )
+    return result
 
 # ─── ENGINE 6: Predictive Risk Analysis ──────────────────────
 

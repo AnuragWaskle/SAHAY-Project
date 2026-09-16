@@ -4,6 +4,7 @@ export interface UserProfile {
   id: string;
   name: string;
   email: string;
+  phone?: string;
   role: 'citizen' | 'ngo' | 'super_admin';
   ward?: string;
   city?: string;
@@ -11,6 +12,7 @@ export interface UserProfile {
   level?: number;
   badges?: string[];
   civicCoins?: number;
+  avatar_url?: string;
 }
 
 export interface AuthContextType {
@@ -18,7 +20,7 @@ export interface AuthContextType {
   token: string | null;
   role: 'citizen' | 'ngo' | 'super_admin';
   setRole: (role: 'citizen' | 'ngo' | 'super_admin') => void;
-  login: (email: string, pass: string, role?: 'citizen' | 'ngo') => Promise<void>;
+  login: (userData: UserProfile, token?: string) => Promise<void>;
   logout: () => void;
 }
 

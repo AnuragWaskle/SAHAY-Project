@@ -56,7 +56,10 @@ router.get('/me', requireAuth, async (req: AuthRequest, res: Response) => {
         u.privacy_level, u.notification_pref, u.language_pref, u.phone, u.email,
         u.civic_credits, u.trust_score, u.referral_code,
         (SELECT COUNT(*) FROM reports WHERE user_id = u.id) as report_count,
-        (SELECT COUNT(*) FROM resolution_verifications WHERE user_id = u.id) as resolved_count
+        (SELECT COUNT(*) FROM resolution_verifications WHERE user_id = u.id) as resolved_count,
+        (SELECT COALESCE(json_agg(
+          json_build_object('id', b.id, 'name', b.name, 'description', b.description, 'icon', b.icon, 'category', b.category, 'earned_at', ub.earned_at)
+        ), '[]') FROM user_badges ub JOIN badges b ON ub.badge_id = b.id WHERE ub.user_id = u.id) as badges
        FROM users u
        WHERE u.id = $1`,
       [req.user!.id]
@@ -114,9 +117,12 @@ router.patch('/me', requireAuth, async (req: AuthRequest, res: Response) => {
 router.get('/:id', optionalAuth, async (req: AuthRequest, res: Response) => {
   try {
     const result = await query(
-      `SELECT u.id, u.name, u.civic_impact_score, u.level, u.badge_type, u.avatar_url, u.role, u.bio,
+      `SELECT u.id, u.name, u.civic_impact_score, u.level, u.badge_type, u.avatar_url, u.role, u.bio, u.email, u.phone, u.created_at,
         (SELECT COUNT(*) FROM reports WHERE user_id = u.id) as report_count,
-        (SELECT COUNT(*) FROM resolution_verifications WHERE user_id = u.id) as resolved_count
+        (SELECT COUNT(*) FROM resolution_verifications WHERE user_id = u.id) as resolved_count,
+        (SELECT COALESCE(json_agg(
+          json_build_object('id', b.id, 'name', b.name, 'description', b.description, 'icon', b.icon, 'category', b.category, 'earned_at', ub.earned_at)
+        ), '[]') FROM user_badges ub JOIN badges b ON ub.badge_id = b.id WHERE ub.user_id = u.id) as badges
        FROM users u
        WHERE u.id = $1`,
       [req.params.id]
@@ -130,6 +136,28 @@ router.get('/:id', optionalAuth, async (req: AuthRequest, res: Response) => {
     res.json({ success: true, data: result.rows[0] });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message || 'Failed to fetch user profile' });
+  }
+});
+
+// ─── POST /users/feedback ─────────────────────────────────────
+// Submit application feedback
+router.post('/feedback', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const { rating, comment } = req.body;
+    
+    if (rating === undefined || rating < 1 || rating > 5) {
+      res.status(400).json({ success: false, error: 'Rating must be between 1 and 5' });
+      return;
+    }
+
+    const result = await query(
+      `INSERT INTO app_feedback (user_id, rating, comment) VALUES ($1, $2, $3) RETURNING *`,
+      [req.user!.id, rating, comment || null]
+    );
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to submit feedback' });
   }
 });
 
