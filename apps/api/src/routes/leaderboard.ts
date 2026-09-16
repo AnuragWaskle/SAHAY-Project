@@ -23,8 +23,8 @@ router.get('/', optionalAuth, async (req: AuthRequest, res: Response) => {
         params.push(limitNum);
 
         result = await query(
-          `SELECT u.id, u.name, u.avatar_url, COALESCE(u.civic_impact_score, 100) as civic_impact_score, u.level, u.badge_type,
-            COALESCE(w.name, 'Ward 12, Bhopal') as ward_name,
+          `SELECT u.id, u.name, u.avatar_url, COALESCE(u.civic_impact_score, 0) as civic_impact_score, u.level, u.badge_type,
+            COALESCE(w.name, 'Unassigned Ward') as ward_name,
             (SELECT COUNT(*) FROM reports WHERE user_id = u.id) as report_count
            FROM users u
            LEFT JOIN wards w ON u.jurisdiction_id = w.id
@@ -46,9 +46,9 @@ router.get('/', optionalAuth, async (req: AuthRequest, res: Response) => {
         params.push(limitNum);
 
         result = await query(
-          `SELECT u.id, u.name, u.role, u.avatar_url, COALESCE(u.civic_impact_score, 150) as civic_impact_score, u.badge_type,
-            COALESCE(w.name, 'Ward 12, Bhopal') as ward_name,
-            COALESCE((SELECT COUNT(*) FROM civic_incidents WHERE status IN ('resolved', 'closed', 'completed')), 8) as resolved_count
+          `SELECT u.id, u.name, u.role, u.avatar_url, COALESCE(u.civic_impact_score, 0) as civic_impact_score, u.badge_type,
+            COALESCE(w.name, 'Unassigned Ward') as ward_name,
+            (SELECT COUNT(*) FROM civic_incidents WHERE status IN ('resolved', 'closed', 'completed')) as resolved_count
            FROM users u
            LEFT JOIN wards w ON u.jurisdiction_id = w.id
            ${where}
@@ -73,7 +73,7 @@ router.get('/', optionalAuth, async (req: AuthRequest, res: Response) => {
             COUNT(DISTINCT r.id) as report_count,
             COUNT(DISTINCT CASE WHEN ci.status IN ('resolved', 'closed', 'completed') THEN ci.id END) as resolved_incidents,
             COUNT(DISTINCT ci.id) as total_incidents,
-            COALESCE(ROUND(COUNT(DISTINCT CASE WHEN ci.status IN ('resolved', 'closed', 'completed') THEN ci.id END)::numeric / NULLIF(COUNT(DISTINCT ci.id), 0) * 100, 1), 82.5) as resolution_rate
+            COALESCE(ROUND(COUNT(DISTINCT CASE WHEN ci.status IN ('resolved', 'closed', 'completed') THEN ci.id END)::numeric / NULLIF(COUNT(DISTINCT ci.id), 0) * 100, 1), 0) as resolution_rate
            FROM wards w
            LEFT JOIN reports r ON r.ward_id = w.id
            LEFT JOIN civic_incidents ci ON ci.ward_id = w.id
@@ -98,7 +98,7 @@ router.get('/', optionalAuth, async (req: AuthRequest, res: Response) => {
           `SELECT c.id, c.name, c.state,
             COUNT(DISTINCT ci.id) as total_incidents,
             COUNT(DISTINCT CASE WHEN ci.status IN ('resolved', 'closed', 'completed') THEN ci.id END) as resolved_incidents,
-            COALESCE(ROUND(COUNT(DISTINCT CASE WHEN ci.status IN ('resolved', 'closed', 'completed') THEN ci.id END)::numeric / NULLIF(COUNT(DISTINCT ci.id), 0) * 100, 1), 91.2) as resolution_rate
+            COALESCE(ROUND(COUNT(DISTINCT CASE WHEN ci.status IN ('resolved', 'closed', 'completed') THEN ci.id END)::numeric / NULLIF(COUNT(DISTINCT ci.id), 0) * 100, 1), 0) as resolution_rate
            FROM cities c
            LEFT JOIN civic_incidents ci ON ci.city_id = c.id
            ${where}

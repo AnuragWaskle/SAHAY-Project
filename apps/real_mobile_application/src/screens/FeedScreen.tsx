@@ -243,7 +243,7 @@ export default function FeedScreen({ navigation }: any) {
   const activeRoads = incidents.filter(i => (i.category || '').toLowerCase().includes('road')).length;
   const activePower = incidents.filter(i => (i.category || '').toLowerCase().includes('light') || (i.category || '').toLowerCase().includes('power')).length;
   const activeWater = incidents.filter(i => (i.category || '').toLowerCase().includes('water') || (i.category || '').toLowerCase().includes('drain')).length;
-  const resolvedRate = totalCount > 0 ? Math.round((resolvedCount / totalCount) * 100) : 92;
+  const resolvedRate = totalCount > 0 ? Math.round((resolvedCount / totalCount) * 100) : 0;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
