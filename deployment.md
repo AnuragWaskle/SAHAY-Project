@@ -27,7 +27,7 @@ This service runs the Nemotron LLM and DINOv2 vision models. It must be deployed
    - **Root Directory**: `apps/ai-services`
    - **Environment**: `Python 3`
    - **Build Command**: `pip install -r requirements.txt`
-   - **Start Command**: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+   - **Start Command**: `uvicorn main:app --host 0.0.0.0`
 5. **Environment Variables**:
    - `DATABASE_URL`: *(Paste the Internal Database URL from Phase 1 above)*
    - `NVIDIA_API_KEY`: *(Paste your NVIDIA Nemotron API Key)*
