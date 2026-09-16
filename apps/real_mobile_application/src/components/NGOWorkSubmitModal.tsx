@@ -73,7 +73,7 @@ export default function NGOWorkSubmitModal({
       }
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
+        allowsEditing: false,
         quality: 0.8,
       });
       if (!result.canceled && result.assets?.[0]?.uri) {

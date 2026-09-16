@@ -124,8 +124,7 @@ export default function ProfileScreen({ navigation }: any) {
             }
             const res = await ImagePicker.launchCameraAsync({
               mediaTypes: ImagePicker.MediaTypeOptions.Images,
-              allowsEditing: true,
-              aspect: [1, 1],
+              allowsEditing: false,
               quality: 0.8,
             });
             if (!res.canceled && res.assets?.[0]?.uri) {
@@ -147,8 +146,7 @@ export default function ProfileScreen({ navigation }: any) {
             }
             const res = await ImagePicker.launchImageLibraryAsync({
               mediaTypes: ImagePicker.MediaTypeOptions.Images,
-              allowsEditing: true,
-              aspect: [1, 1],
+              allowsEditing: false,
               quality: 0.8,
             });
             if (!res.canceled && res.assets?.[0]?.uri) {
@@ -179,8 +177,8 @@ export default function ProfileScreen({ navigation }: any) {
   const totalReportsCount = userReports.length;
   const resolvedCount = userReports.filter((r) => ['resolved', 'closed', 'completed'].includes(r.status)).length;
   const avatarDisplayUri = customAvatar || profile?.avatar_url || user?.avatar_url;
-  const civicScore = profile?.civic_impact_score ?? user?.civic_impact_score ?? 0;
-  const userLevel = profile?.level ?? user?.level ?? 1;
+  const civicScore = profile?.civic_impact_score ?? (user as any)?.civic_impact_score ?? 0;
+  const userLevel = profile?.level ?? (user as any)?.level ?? 1;
 
   return (
     <View style={styles.container}>
@@ -226,7 +224,7 @@ export default function ProfileScreen({ navigation }: any) {
 
           <View style={styles.locationMetaRow}>
             <MapPin size={13} color="#7C3AED" />
-            <Text style={styles.locationMetaText}>{profile?.ward_name || user?.ward_name || 'Bhopal, MP'} • Civic Sentinel</Text>
+            <Text style={styles.locationMetaText}>{profile?.ward_name || (user as any)?.ward_name || 'Bhopal, MP'} • Civic Sentinel</Text>
           </View>
 
           {/* XP Progress Level Card */}
@@ -439,7 +437,7 @@ export default function ProfileScreen({ navigation }: any) {
                 </View>
               ))
             ) : (
-              <View style={{ alignItems: 'center', py: 20 }}>
+              <View style={{ alignItems: 'center', paddingVertical: 20 }}>
                 <Text style={{ color: '#9CA3AF', fontSize: 16, fontWeight: 'bold' }}>No badges earned yet.</Text>
                 <Text style={{ color: '#9CA3AF', fontSize: 14, textAlign: 'center', marginTop: 4 }}>Report issues to earn civic badges!</Text>
               </View>

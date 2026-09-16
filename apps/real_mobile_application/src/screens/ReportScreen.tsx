@@ -48,6 +48,7 @@ export default function ReportScreen({ navigation }: any) {
   });
   const [fetchingLocation, setFetchingLocation] = useState(false);
   const [fullMapModalOpen, setFullMapModalOpen] = useState(false);
+  const [locationPermissionGranted, setLocationPermissionGranted] = useState(false);
 
   // Media state (camera capture only)
   const [imageUri, setImageUri] = useState<string | null>(null);
@@ -113,6 +114,7 @@ export default function ReportScreen({ navigation }: any) {
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
+        setLocationPermissionGranted(false);
         Alert.alert(
           'Location Access Required',
           'Sahay requires location permissions to pinpoint the civic issue on Google Maps for municipal repair teams.',
@@ -123,6 +125,7 @@ export default function ReportScreen({ navigation }: any) {
         return;
       }
 
+      setLocationPermissionGranted(true);
       const loc = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.High,
       });
@@ -161,14 +164,15 @@ export default function ReportScreen({ navigation }: any) {
     fetchLiveLocation();
   }, []);
 
-  // Map press handler to let citizens adjust pin
+  // Map press handler to let citizens adjust pin safely
   const handleMapPress = (e: any) => {
-    const newPoint = e.nativeEvent.coordinate;
+    const newPoint = e?.nativeEvent?.coordinate;
+    if (!newPoint || typeof newPoint.latitude !== 'number' || typeof newPoint.longitude !== 'number') return;
     setCoords(newPoint);
     updateAddressForCoords(newPoint.latitude, newPoint.longitude);
   };
 
-  // 2. Take Picture using Mobile Camera ONLY (No Gallery)
+  // 2. Take Picture using Mobile Camera ONLY (No Gallery) - Safe allowsEditing: false
   const handleCameraCapture = async () => {
     try {
       const permission = await ImagePicker.requestCameraPermissionsAsync();
@@ -179,17 +183,16 @@ export default function ReportScreen({ navigation }: any) {
 
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        quality: 0.8,
-        aspect: [4, 3],
+        allowsEditing: false,
+        quality: 0.7,
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         setImageUri(result.assets[0].uri);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Camera launch error:', err);
-      Alert.alert('Camera Error', 'Could not open camera module.');
+      Alert.alert('Camera Error', 'Could not open camera module: ' + (err?.message || 'Unknown error'));
     }
   };
 
@@ -244,7 +247,15 @@ export default function ReportScreen({ navigation }: any) {
       );
     } catch (e: any) {
       console.warn('Submit error:', e);
-      Alert.alert('Submission Failed', e.response?.data?.error || 'Unable to submit report. Please try again.');
+      let errorMsg = 'Unable to submit report. Please try again.';
+      if (typeof e.response?.data?.error === 'string') {
+        errorMsg = e.response.data.error;
+      } else if (e.response?.data?.error && typeof e.response.data.error === 'object') {
+        errorMsg = JSON.stringify(e.response.data.error);
+      } else if (e.message) {
+        errorMsg = e.message;
+      }
+      Alert.alert('Submission Failed', errorMsg);
     } finally {
       setSubmitting(false);
     }
@@ -318,8 +329,8 @@ export default function ReportScreen({ navigation }: any) {
           <TouchableOpacity activeOpacity={0.9} style={styles.mapWrapper} onPress={() => setFullMapModalOpen(true)}>
             <MapView
               style={styles.miniMap}
-              showsUserLocation={true}
-              showsMyLocationButton={true}
+              showsUserLocation={locationPermissionGranted}
+              showsMyLocationButton={locationPermissionGranted}
               showsCompass={true}
               region={{
                 latitude: coords.latitude,
@@ -335,9 +346,11 @@ export default function ReportScreen({ navigation }: any) {
                 description={locationAddress}
                 draggable
                 onDragEnd={(e) => {
-                  const pt = e.nativeEvent.coordinate;
-                  setCoords(pt);
-                  updateAddressForCoords(pt.latitude, pt.longitude);
+                  const pt = e?.nativeEvent?.coordinate;
+                  if (pt && typeof pt.latitude === 'number' && typeof pt.longitude === 'number') {
+                    setCoords(pt);
+                    updateAddressForCoords(pt.latitude, pt.longitude);
+                  }
                 }}
               />
             </MapView>
@@ -537,6 +550,8 @@ export default function ReportScreen({ navigation }: any) {
           <View style={{ flex: 1 }}>
             <MapView
               style={{ flex: 1 }}
+              showsUserLocation={locationPermissionGranted}
+              showsMyLocationButton={locationPermissionGranted}
               region={{
                 latitude: coords.latitude,
                 longitude: coords.longitude,
@@ -551,9 +566,11 @@ export default function ReportScreen({ navigation }: any) {
                 description={locationAddress}
                 draggable
                 onDragEnd={(e) => {
-                  const pt = e.nativeEvent.coordinate;
-                  setCoords(pt);
-                  updateAddressForCoords(pt.latitude, pt.longitude);
+                  const pt = e?.nativeEvent?.coordinate;
+                  if (pt && typeof pt.latitude === 'number' && typeof pt.longitude === 'number') {
+                    setCoords(pt);
+                    updateAddressForCoords(pt.latitude, pt.longitude);
+                  }
                 }}
               />
             </MapView>
