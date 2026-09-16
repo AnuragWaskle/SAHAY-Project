@@ -1,0 +1,8 @@
+#!/usr/bin/expect -f
+set timeout -1
+spawn npx -y eas-cli login
+expect "Email or username"
+send "anuragwaskle\r"
+expect "Password"
+send "Anurag12\r"
+expect eof

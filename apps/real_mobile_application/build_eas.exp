@@ -1,0 +1,20 @@
+#!/usr/bin/expect -f
+set timeout -1
+spawn npx eas-cli build -p android --profile preview
+expect {
+    "Generate a new Android Keystore?" {
+        send "y\r"
+        exp_continue
+    }
+    "Would you like to automatically create an EAS project" {
+        send "Y\r"
+        exp_continue
+    }
+    "What would you like your Android application id to be" {
+        send "\r"
+        exp_continue
+    }
+    eof {
+        exit 0
+    }
+}

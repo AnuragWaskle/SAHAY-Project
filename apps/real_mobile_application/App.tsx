@@ -21,6 +21,7 @@ import SettingsScreen from './src/screens/SettingsScreen';
 import NotificationsScreen from './src/screens/NotificationsScreen';
 import FeedbackScreen from './src/screens/FeedbackScreen';
 import { setAuthToken } from './src/api/client';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -183,10 +184,15 @@ export default function App() {
     setAuthToken(activeToken);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setUser(null);
     setToken(null);
     setAuthToken(null);
+    try {
+      await AsyncStorage.multiRemove(['@saved_posts', '@user_avatar']);
+    } catch (e) {
+      console.warn('Failed to clear AsyncStorage on logout', e);
+    }
   };
 
   const activeRole = user?.role ? user.role : role;

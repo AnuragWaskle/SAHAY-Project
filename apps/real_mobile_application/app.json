@@ -21,7 +21,14 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundColor": "#FFFFFF"
+      },
+      "package": "com.anuragwaskle.sahayrealmobileapplication"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "e401c54b-33b0-4076-8126-bb642db7e2d5"
       }
-    }
+    },
+    "owner": "anuragwaskle"
   }
 }
