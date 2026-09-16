@@ -1,13 +1,10 @@
 import axios from 'axios';
 
 // ── Live production backend URL ─────────────────────────────────────────────
-// IMPORTANT: EXPO_PUBLIC_API_URL must be set at EAS build time to the actual
-// deployed Render backend URL, e.g.:
-//   EXPO_PUBLIC_API_URL=https://your-sahay-api.onrender.com/api/v1 npx eas build ...
-//
-// The default below is a placeholder. If you see 404 errors, it means the
-// backend is not deployed yet or the URL is wrong.
-const DEFAULT_URL = 'https://sahay-api.onrender.com/api/v1';
+// Actual deployed Render backend: https://sahay-api-1bks.onrender.com
+// The .env file sets EXPO_PUBLIC_API_URL=https://sahay-api-1bks.onrender.com/api/v1
+// This DEFAULT_URL matches that and is used as a fallback during dev/builds.
+const DEFAULT_URL = 'https://sahay-api-1bks.onrender.com/api/v1';
 const API_URL = process.env.EXPO_PUBLIC_API_URL || DEFAULT_URL;
 
 let authToken: string | null = null;
