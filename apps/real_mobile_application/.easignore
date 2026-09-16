@@ -1,0 +1,10 @@
+node_modules
+.expo
+.git
+android
+ios
+dist
+web-build
+.next
+*.apk
+*.aab
