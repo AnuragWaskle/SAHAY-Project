@@ -8,7 +8,20 @@
         "buildType": "apk"
       }
     },
-    "production": {}
+    "preview-arm64": {
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease",
+        "env": {
+          "ANDROID_ABI_FILTERS": "arm64-v8a"
+        }
+      }
+    },
+    "production": {
+      "android": {
+        "buildType": "app-bundle"
+      }
+    }
   },
   "submit": {
     "production": {}

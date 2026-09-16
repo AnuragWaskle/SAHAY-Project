@@ -198,6 +198,10 @@ export default function ReportScreen({ navigation }: any) {
 
   // 3. Form Submission to Backend API
   const handleSubmit = async () => {
+    // Duplicate submit protection — already guarded by `disabled={submitting}` but
+    // adding an explicit guard here as well for safety
+    if (submitting) return;
+
     const finalCategory = category === 'Other' ? (customCategory.trim() || 'General Issue') : category;
 
     if (!imageUri) {
@@ -219,16 +223,30 @@ export default function ReportScreen({ navigation }: any) {
 
     setSubmitting(true);
     try {
+      // NOTE: imageUri is a local device file:// path.
+      // Local device paths cannot be served to other users' devices.
+      // We send it to the backend for record-keeping, but the backend should
+      // upload it to cloud storage before storing (future enhancement).
+      // For now, we send media_urls as empty to avoid storing broken local paths
+      // in the database that would cause image render failures in the feed.
+      const safeMediaUrls: string[] = [];
+
+      // Only include the imageUri if it looks like a real hosted URL (http/https)
+      // Local file:// device paths are stripped — they cannot be accessed by other devices.
+      if (imageUri && (imageUri.startsWith('http://') || imageUri.startsWith('https://'))) {
+        safeMediaUrls.push(imageUri);
+      }
+
       await apiClient.post('/reports', {
+        // title is sent but the current backend Zod schema does not include it.
+        // It is silently ignored by the server but kept here for forward-compatibility.
         title: title.trim(),
         description: description.trim(),
         category: finalCategory,
         address: locationAddress,
         lat: coords.latitude,
         lng: coords.longitude,
-        latitude: coords.latitude,
-        longitude: coords.longitude,
-        media_urls: imageUri ? [imageUri] : [],
+        media_urls: safeMediaUrls,
       });
 
       Alert.alert(
@@ -246,15 +264,39 @@ export default function ReportScreen({ navigation }: any) {
         ]
       );
     } catch (e: any) {
-      console.warn('Submit error:', e);
-      let errorMsg = 'Unable to submit report. Please try again.';
-      if (typeof e.response?.data?.error === 'string') {
-        errorMsg = e.response.data.error;
-      } else if (e.response?.data?.error && typeof e.response.data.error === 'object') {
-        errorMsg = JSON.stringify(e.response.data.error);
+      console.warn('[ReportScreen] Submit error:', e);
+
+      // Determine a human-readable error message
+      let errorMsg = 'Unable to submit report. Please check your internet connection and try again.';
+
+      // Use the pre-processed userMessage from the API client interceptor if available
+      if (e.userMessage) {
+        errorMsg = e.userMessage;
+      } else if (e.response) {
+        // Server responded with an error
+        const data = e.response.data;
+        if (typeof data?.error === 'string') {
+          errorMsg = data.error;
+        } else if (data?.error && typeof data.error === 'object') {
+          // Zod validation error details
+          const details = (data.details || []).map((d: any) => d.message || JSON.stringify(d)).join('\n');
+          errorMsg = details || 'Validation error. Please check your inputs.';
+        } else if (typeof data?.detail === 'string') {
+          // FastAPI format — wrong server
+          errorMsg = 'The server could not process your request. The backend may not be deployed yet. Contact support.';
+        } else if (e.response.status === 429) {
+          errorMsg = 'Too many reports submitted. Please wait before submitting another report.';
+        } else if (e.response.status === 401) {
+          errorMsg = 'You must be logged in to submit a report. Please log in again.';
+        } else {
+          errorMsg = `Server error (${e.response.status}). Please try again.`;
+        }
+      } else if (e.code === 'ECONNABORTED') {
+        errorMsg = 'Request timed out. The server may be starting up (Render cold start). Please try again in 30 seconds.';
       } else if (e.message) {
         errorMsg = e.message;
       }
+
       Alert.alert('Submission Failed', errorMsg);
     } finally {
       setSubmitting(false);

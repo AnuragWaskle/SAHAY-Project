@@ -166,11 +166,15 @@ export default function App() {
   const [token, setToken] = useState<string | null>(null);
 
   React.useEffect(() => {
-    setAuthToken(token || 'demo_token_ngo');
+    // Only set the token if we actually have one from a login
+    // Do NOT fall back to a hardcoded demo token — that causes all reports
+    // to be submitted under the same shared account.
+    setAuthToken(token);
   }, [token]);
 
   const handleLogin = async (userData: UserProfile, authToken?: string) => {
-    const activeToken = authToken || `demo_user_${userData.id || '1'}`;
+    // Use the provided token, or generate a stable unique token per user
+    const activeToken = authToken || `token_${userData.id || Date.now()}`;
     setUser(userData);
     setToken(activeToken);
     setRoleState(userData.role);
